@@ -1,8 +1,12 @@
 from __future__ import annotations
 import json
 import os
+import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
 from todo_cli.errors import BadCommandUsage, SchemaMismatch, StorageCorrupt, TodoNotFound
 from todo_cli.models import Todo
@@ -10,11 +14,49 @@ from todo_cli.models import Todo
 SCHEMA_VERSION = 1
 
 
+if sys.platform == "win32":
+    import msvcrt
+
+    def _platform_lock(fp) -> None:
+        while True:
+            try:
+                msvcrt.locking(fp.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                time.sleep(0.01)
+
+    def _platform_unlock(fp) -> None:
+        try:
+            fp.seek(0)
+            msvcrt.locking(fp.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+else:
+    import fcntl
+
+    def _platform_lock(fp) -> None:
+        fcntl.flock(fp.fileno(), fcntl.LOCK_EX)
+
+    def _platform_unlock(fp) -> None:
+        fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
+
+
 class Storage:
     def __init__(self, path: Path):
         self.path = Path(path)
 
     # -- internal helpers --
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = self.path.with_suffix(self.path.suffix + ".lock")
+        with open(lock_file, "a+b") as fp:
+            _platform_lock(fp)
+            try:
+                yield
+            finally:
+                _platform_unlock(fp)
 
     def _read(self) -> tuple[int, list[Todo]]:
         if not self.path.exists():
@@ -49,32 +91,36 @@ class Storage:
 
     def load(self) -> None:
         """Ensure file exists and is parseable. Idempotent."""
-        next_id, todos = self._read()
-        if not self.path.exists():
-            self._write(next_id, todos)
+        with self._locked():
+            next_id, todos = self._read()
+            if not self.path.exists():
+                self._write(next_id, todos)
 
     def get(self, id: int) -> Todo:
-        _, todos = self._read()
-        for t in todos:
-            if t.id == id:
-                return t
-        raise TodoNotFound(f"No todo with id {id}")
+        with self._locked():
+            _, todos = self._read()
+            for t in todos:
+                if t.id == id:
+                    return t
+            raise TodoNotFound(f"No todo with id {id}")
 
     def add(self, todo: Todo) -> Todo:
-        next_id, todos = self._read()
-        todo.id = next_id
-        todos.append(todo)
-        self._write(next_id + 1, todos)
-        return todo
+        with self._locked():
+            next_id, todos = self._read()
+            todo.id = next_id
+            todos.append(todo)
+            self._write(next_id + 1, todos)
+            return todo
 
     def delete(self, id: int) -> None:
-        next_id, todos = self._read()
-        for i, t in enumerate(todos):
-            if t.id == id:
-                del todos[i]
-                self._write(next_id, todos)
-                return
-        raise TodoNotFound(f"No todo with id {id}")
+        with self._locked():
+            next_id, todos = self._read()
+            for i, t in enumerate(todos):
+                if t.id == id:
+                    del todos[i]
+                    self._write(next_id, todos)
+                    return
+            raise TodoNotFound(f"No todo with id {id}")
 
     _UPDATABLE_FIELDS = {"text", "done", "due", "priority", "tags", "project"}
 
@@ -82,16 +128,17 @@ class Storage:
         for k in fields:
             if k not in self._UPDATABLE_FIELDS:
                 raise BadCommandUsage(f"Cannot update field: {k}")
-        next_id, todos = self._read()
-        for t in todos:
-            if t.id == id:
-                for k, v in fields.items():
-                    setattr(t, k, v)
-                if "done" in fields:
-                    t.completed_at = datetime.now() if fields["done"] else None
-                self._write(next_id, todos)
-                return t
-        raise TodoNotFound(f"No todo with id {id}")
+        with self._locked():
+            next_id, todos = self._read()
+            for t in todos:
+                if t.id == id:
+                    for k, v in fields.items():
+                        setattr(t, k, v)
+                    if "done" in fields:
+                        t.completed_at = datetime.now() if fields["done"] else None
+                    self._write(next_id, todos)
+                    return t
+            raise TodoNotFound(f"No todo with id {id}")
 
     def list(
         self,
@@ -104,7 +151,8 @@ class Storage:
     ) -> list[Todo]:
         from datetime import date as _date
 
-        _, todos = self._read()
+        with self._locked():
+            _, todos = self._read()
         results = list(todos)
         if done is not None:
             results = [t for t in results if t.done == done]

@@ -200,3 +200,27 @@ def test_list_today(storage_path: Path):
     s.add(today_t)
     s.add(other)
     assert [x.text for x in s.list(today=True)] == ["today"]
+
+
+import threading
+
+
+def test_concurrent_adds_do_not_lose_writes(storage_path: Path):
+    """Two threads each adding 25 todos via separate Storage instances must
+    yield 50 distinct todos with monotonic ids and no torn state."""
+    Storage(storage_path).load()  # initialize file
+
+    def add_many(prefix: str) -> None:
+        s = Storage(storage_path)
+        for i in range(25):
+            s.add(_make_todo(f"{prefix}-{i}"))
+
+    t1 = threading.Thread(target=add_many, args=("a",))
+    t2 = threading.Thread(target=add_many, args=("b",))
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    final = Storage(storage_path).list()
+    ids = sorted(t.id for t in final)
+    assert len(final) == 50
+    assert ids == list(range(1, 51))
