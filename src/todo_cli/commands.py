@@ -228,3 +228,10 @@ def _handle_edit(args: list[str], storage: Storage, config: Config) -> CommandRe
         value = raw_value
     storage.update(tid, **{field: value})
     return CommandResult(renderable=render.render_info(f"Updated #{tid}.{field}"))
+
+
+@command("/del")
+def _handle_del(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    tid = _parse_id(args, "/del")
+    storage.delete(tid)
+    return CommandResult(renderable=render.render_info(f"Deleted #{tid}"))

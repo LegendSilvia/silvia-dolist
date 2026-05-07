@@ -205,3 +205,14 @@ def test_edit_unknown_field_errors(storage: Storage, config: Config):
     result = run_command("/edit 1 banana yes", storage, config)
     rendered = str(result.renderable).lower()
     assert "field" in rendered or "banana" in rendered
+
+
+def test_del_removes(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/del 1", storage, config)
+    assert storage.list(done=None) == []
+
+
+def test_del_missing_returns_error(storage: Storage, config: Config):
+    result = run_command("/del 999", storage, config)
+    assert "999" in str(result.renderable)
