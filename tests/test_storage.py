@@ -39,3 +39,55 @@ def test_load_rejects_unknown_version(storage_path: Path):
     s = Storage(storage_path)
     with pytest.raises(SchemaMismatch):
         s.load()
+
+
+from datetime import datetime
+from todo_cli.errors import TodoNotFound
+from todo_cli.models import Todo
+
+
+def _make_todo(text: str = "x") -> Todo:
+    return Todo(id=0, text=text, created_at=datetime(2026, 1, 1, 0, 0, 0))
+
+
+def test_add_assigns_monotonic_ids(storage_path: Path):
+    s = Storage(storage_path)
+    a = s.add(_make_todo("a"))
+    b = s.add(_make_todo("b"))
+    assert a.id == 1
+    assert b.id == 2
+
+
+def test_add_persists_to_disk(storage_path: Path):
+    s1 = Storage(storage_path)
+    s1.add(_make_todo("persisted"))
+    s2 = Storage(storage_path)
+    assert s2.get(1).text == "persisted"
+
+
+def test_get_returns_todo(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("hello"))
+    assert s.get(t.id).text == "hello"
+
+
+def test_get_missing_raises(storage_path: Path):
+    s = Storage(storage_path)
+    s.load()
+    with pytest.raises(TodoNotFound):
+        s.get(999)
+
+
+def test_delete_removes(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("x"))
+    s.delete(t.id)
+    with pytest.raises(TodoNotFound):
+        s.get(t.id)
+
+
+def test_delete_missing_raises(storage_path: Path):
+    s = Storage(storage_path)
+    s.load()
+    with pytest.raises(TodoNotFound):
+        s.delete(7)

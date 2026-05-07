@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from todo_cli.errors import SchemaMismatch, StorageCorrupt
+from todo_cli.errors import SchemaMismatch, StorageCorrupt, TodoNotFound
 from todo_cli.models import Todo
 
 SCHEMA_VERSION = 1
@@ -51,3 +51,26 @@ class Storage:
         next_id, todos = self._read()
         if not self.path.exists():
             self._write(next_id, todos)
+
+    def get(self, id: int) -> Todo:
+        _, todos = self._read()
+        for t in todos:
+            if t.id == id:
+                return t
+        raise TodoNotFound(f"No todo with id {id}")
+
+    def add(self, todo: Todo) -> Todo:
+        next_id, todos = self._read()
+        todo.id = next_id
+        todos.append(todo)
+        self._write(next_id + 1, todos)
+        return todo
+
+    def delete(self, id: int) -> None:
+        next_id, todos = self._read()
+        for i, t in enumerate(todos):
+            if t.id == id:
+                del todos[i]
+                self._write(next_id, todos)
+                return
+        raise TodoNotFound(f"No todo with id {id}")
