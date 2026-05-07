@@ -1,10 +1,13 @@
 from __future__ import annotations
+import argparse
 import shlex
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Callable
 
 from todo_cli.config import Config
-from todo_cli.errors import TodoError
+from todo_cli.errors import BadCommandUsage, TodoError
+from todo_cli.models import Todo
 from todo_cli.storage import Storage
 from todo_cli.suggest import suggest
 from todo_cli import render
@@ -93,13 +96,6 @@ def _handle_clear(args: list[str], storage: Storage, config: Config) -> CommandR
 @command("/quit")
 def _handle_exit(args: list[str], storage: Storage, config: Config) -> CommandResult:
     return CommandResult(exit=True)
-
-
-import argparse
-from datetime import date, datetime
-
-from todo_cli.errors import BadCommandUsage
-from todo_cli.models import Todo
 
 
 def _parse_or_raise(parser: argparse.ArgumentParser, args: list[str]):

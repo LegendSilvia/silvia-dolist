@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import date
 import pytest
 
 from todo_cli.commands import CommandResult, KNOWN_COMMANDS, run_command
@@ -53,9 +54,6 @@ def test_clear_signals_clear(storage: Storage, config: Config):
 def test_exit_and_quit_signal_exit(storage: Storage, config: Config):
     assert run_command("/exit", storage, config).exit is True
     assert run_command("/quit", storage, config).exit is True
-
-
-from datetime import date
 
 
 def test_add_basic(storage: Storage, config: Config):
