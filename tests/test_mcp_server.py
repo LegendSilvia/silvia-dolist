@@ -1,10 +1,14 @@
+import asyncio
+import json
 from datetime import date
 from pathlib import Path
 
+import mcp.types as types
 import pytest
 
 from todo_cli.errors import BadCommandUsage, TodoNotFound
 from todo_cli.mcp_server import (
+    build_server,
     tool_add_todo,
     tool_delete_todo,
     tool_edit_todo,
@@ -91,6 +95,124 @@ def test_edit_unknown_field_raises(storage: Storage):
 
 
 def test_build_server_constructs(storage: Storage):
-    from todo_cli.mcp_server import build_server
     server = build_server(storage)
     assert server is not None
+
+
+# ---------------------------------------------------------------------------
+# Async _call_tool handler tests via request_handlers introspection
+# ---------------------------------------------------------------------------
+
+def _call_tool_via_server(server, name: str, arguments: dict) -> list[types.TextContent]:
+    """Invoke the registered call_tool handler directly without stdio transport."""
+    handler = None
+    for req_type, fn in server.request_handlers.items():
+        type_name = getattr(req_type, "__name__", str(req_type))
+        if "CallTool" in type_name or "tools/call" in str(req_type):
+            handler = fn
+            break
+    assert handler is not None, "call_tool handler not registered"
+    request = types.CallToolRequest(
+        method="tools/call",
+        params=types.CallToolRequestParams(name=name, arguments=arguments),
+    )
+    result = asyncio.run(handler(request))
+    # Result is a ServerResult; extract content via .root
+    if hasattr(result, "root"):
+        result = result.root
+    return result.content
+
+
+def test_mcp_call_tool_add_and_show(storage: Storage):
+    server = build_server(storage)
+    add_content = _call_tool_via_server(server, "add_todo", {"text": "hello"})
+    add_payload = json.loads(add_content[0].text)
+    assert add_payload["text"] == "hello"
+    assert add_payload["id"] == 1
+
+    show_content = _call_tool_via_server(server, "show_todo", {"id": 1})
+    show_payload = json.loads(show_content[0].text)
+    assert show_payload["text"] == "hello"
+
+
+def test_mcp_call_tool_returns_error_code_for_not_found(storage: Storage):
+    server = build_server(storage)
+    content = _call_tool_via_server(server, "show_todo", {"id": 999})
+    payload = json.loads(content[0].text)
+    assert payload["code"] == "not_found"
+    assert "999" in payload["message"]
+
+
+def test_mcp_call_tool_returns_error_code_for_invalid_args(storage: Storage):
+    # Use priority validation (in tool_edit_todo itself) to trigger BadCommandUsage,
+    # bypassing MCP's schema-level enum check for the "field" parameter.
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x"})
+    content = _call_tool_via_server(server, "edit_todo", {"id": 1, "field": "priority", "value": "urgent"})
+    payload = json.loads(content[0].text)
+    assert payload["code"] == "invalid_args"
+
+
+def test_mcp_call_tool_list_todos(storage: Storage):
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "a"})
+    _call_tool_via_server(server, "add_todo", {"text": "b"})
+    content = _call_tool_via_server(server, "list_todos", {})
+    payload = json.loads(content[0].text)
+    assert len(payload) == 2
+
+
+def test_mcp_call_tool_mark_done_and_undone(storage: Storage):
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x"})
+    done_content = _call_tool_via_server(server, "mark_done", {"id": 1})
+    assert json.loads(done_content[0].text)["done"] is True
+    undone_content = _call_tool_via_server(server, "mark_undone", {"id": 1})
+    assert json.loads(undone_content[0].text)["done"] is False
+
+
+def test_mcp_call_tool_delete(storage: Storage):
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x"})
+    content = _call_tool_via_server(server, "delete_todo", {"id": 1})
+    payload = json.loads(content[0].text)
+    assert payload["status"] == "deleted"
+
+
+def test_mcp_call_tool_edit_due_null(storage: Storage):
+    # Covers the `else None` branch in tool_edit_todo when due is cleared
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x", "due": "2026-06-01"})
+    content = _call_tool_via_server(server, "edit_todo", {"id": 1, "field": "due", "value": ""})
+    payload = json.loads(content[0].text)
+    assert payload["due"] is None
+
+
+def test_mcp_call_tool_edit_tags_as_string(storage: Storage):
+    # Covers the str-split branch in tool_edit_todo for tags
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x"})
+    content = _call_tool_via_server(server, "edit_todo", {"id": 1, "field": "tags", "value": "work, home"})
+    payload = json.loads(content[0].text)
+    assert payload["tags"] == ["work", "home"]
+
+
+def test_mcp_call_tool_unknown_tool_returns_error_result(storage: Storage):
+    # MCP SDK 1.27 catches unknown tools before our handler and returns isError=True
+    # rather than raising an exception.
+    handler = None
+    server = build_server(storage)
+    for req_type, fn in server.request_handlers.items():
+        type_name = getattr(req_type, "__name__", str(req_type))
+        if "CallTool" in type_name:
+            handler = fn
+            break
+    assert handler is not None
+    request = types.CallToolRequest(
+        method="tools/call",
+        params=types.CallToolRequestParams(name="nonexistent_tool", arguments={}),
+    )
+    result = asyncio.run(handler(request))
+    if hasattr(result, "root"):
+        result = result.root
+    assert result.isError is True

@@ -9,7 +9,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
-from todo_cli.errors import BadCommandUsage, TodoError
+from todo_cli.errors import (
+    BadCommandUsage,
+    SchemaMismatch,
+    StorageCorrupt,
+    TodoError,
+    TodoNotFound,
+)
 from todo_cli.models import Todo
 from todo_cli.storage import Storage
 
@@ -171,6 +177,14 @@ _TOOL_DISPATCH = {
 }
 
 
+_ERROR_CODE: dict[type[TodoError], str] = {
+    TodoNotFound: "not_found",
+    BadCommandUsage: "invalid_args",
+    StorageCorrupt: "internal",
+    SchemaMismatch: "internal",
+}
+
+
 def build_server(storage: Storage) -> Server:
     server: Server = Server("todo")
 
@@ -185,9 +199,10 @@ def build_server(storage: Storage) -> Server:
         try:
             result = _TOOL_DISPATCH[name](storage, arguments)
         except TodoError as e:
+            code = _ERROR_CODE.get(type(e), "internal")
             return [types.TextContent(
                 type="text",
-                text=json.dumps({"error": type(e).__name__, "message": str(e)}),
+                text=json.dumps({"code": code, "message": str(e)}),
             )]
         return [types.TextContent(type="text", text=json.dumps(result))]
 
