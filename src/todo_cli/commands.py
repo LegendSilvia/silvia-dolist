@@ -169,3 +169,18 @@ def _handle_list(args: list[str], storage: Storage, config: Config) -> CommandRe
         today=ns.today,
     )
     return CommandResult(renderable=render.render_todo_list(todos))
+
+
+def _parse_id(args: list[str], cmd: str) -> int:
+    if len(args) != 1:
+        raise BadCommandUsage(f"{cmd} <id>")
+    try:
+        return int(args[0])
+    except ValueError as e:
+        raise BadCommandUsage(f"{cmd} <id> — id must be an integer") from e
+
+
+@command("/show")
+def _handle_show(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    tid = _parse_id(args, "/show")
+    return CommandResult(renderable=render.render_todo_detail(storage.get(tid)))

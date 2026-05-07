@@ -133,3 +133,20 @@ def test_list_filter_tag(storage: Storage, config: Config):
     rendered = _render(result.renderable)
     assert "work-task" in rendered
     assert "home-task" not in rendered
+
+
+def test_show_existing(storage: Storage, config: Config):
+    run_command("/add hello", storage, config)
+    result = run_command("/show 1", storage, config)
+    assert "hello" in _render(result.renderable)
+
+
+def test_show_missing_returns_error(storage: Storage, config: Config):
+    result = run_command("/show 999", storage, config)
+    assert "999" in str(result.renderable)
+
+
+def test_show_non_int_id_errors(storage: Storage, config: Config):
+    result = run_command("/show abc", storage, config)
+    rendered = str(result.renderable).lower()
+    assert "id" in rendered or "integer" in rendered
