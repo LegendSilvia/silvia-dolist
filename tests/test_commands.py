@@ -1,10 +1,20 @@
 from pathlib import Path
 from datetime import date
+import io
 import pytest
+
+from rich.console import Console
 
 from todo_cli.commands import CommandResult, KNOWN_COMMANDS, run_command
 from todo_cli.config import Config
 from todo_cli.storage import Storage
+
+
+def _render(renderable) -> str:
+    """Render a Rich renderable to plain string for test assertions."""
+    buf = io.StringIO()
+    Console(file=buf, force_terminal=False, width=200).print(renderable)
+    return buf.getvalue()
 
 
 @pytest.fixture
@@ -95,7 +105,7 @@ def test_list_default_shows_open_only(storage: Storage, config: Config):
     a = storage.list()[0]
     storage.update(a.id, done=True)
     result = run_command("/list", storage, config)
-    rendered = str(result.renderable)
+    rendered = _render(result.renderable)
     # default = open only; "a" is done, "b" is open
     assert "b" in rendered
     assert "Todos (1)" in rendered
@@ -106,20 +116,20 @@ def test_list_all(storage: Storage, config: Config):
     run_command("/add b", storage, config)
     storage.update(storage.list()[0].id, done=True)
     result = run_command("/list --all", storage, config)
-    assert "Todos (2)" in str(result.renderable)
+    assert "Todos (2)" in _render(result.renderable)
 
 
 def test_list_done_only(storage: Storage, config: Config):
     run_command("/add a", storage, config)
     storage.update(storage.list()[0].id, done=True)
     result = run_command("/list --done", storage, config)
-    assert "Todos (1)" in str(result.renderable)
+    assert "Todos (1)" in _render(result.renderable)
 
 
 def test_list_filter_tag(storage: Storage, config: Config):
     run_command("/add work-task --tags work", storage, config)
     run_command("/add home-task --tags home", storage, config)
     result = run_command("/list --tag work", storage, config)
-    rendered = str(result.renderable)
+    rendered = _render(result.renderable)
     assert "work-task" in rendered
     assert "home-task" not in rendered
