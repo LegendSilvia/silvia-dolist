@@ -150,3 +150,21 @@ def test_show_non_int_id_errors(storage: Storage, config: Config):
     result = run_command("/show abc", storage, config)
     rendered = str(result.renderable).lower()
     assert "id" in rendered or "integer" in rendered
+
+
+def test_done_marks_completed(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/done 1", storage, config)
+    assert storage.get(1).done is True
+
+
+def test_undo_clears_completed(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/done 1", storage, config)
+    run_command("/undo 1", storage, config)
+    assert storage.get(1).done is False
+
+
+def test_done_missing_id_returns_error(storage: Storage, config: Config):
+    result = run_command("/done 999", storage, config)
+    assert "999" in str(result.renderable)

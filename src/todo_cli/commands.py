@@ -184,3 +184,17 @@ def _parse_id(args: list[str], cmd: str) -> int:
 def _handle_show(args: list[str], storage: Storage, config: Config) -> CommandResult:
     tid = _parse_id(args, "/show")
     return CommandResult(renderable=render.render_todo_detail(storage.get(tid)))
+
+
+@command("/done")
+def _handle_done(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    tid = _parse_id(args, "/done")
+    storage.update(tid, done=True)
+    return CommandResult(renderable=render.render_info(f"Marked #{tid} done"))
+
+
+@command("/undo")
+def _handle_undo(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    tid = _parse_id(args, "/undo")
+    storage.update(tid, done=False)
+    return CommandResult(renderable=render.render_info(f"Marked #{tid} not done"))
