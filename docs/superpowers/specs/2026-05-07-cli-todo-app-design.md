@@ -8,7 +8,9 @@
 
 A persistent-REPL Python CLI for managing personal todos with rich metadata (text, due date, priority, tags, project). Slash commands drive all behavior. Free-form text auto-creates a todo. Polished output via `rich`; ergonomic input (history, completion) via `prompt_toolkit`. Storage is a single JSON file under the user's home directory.
 
-Phase 2 (deferred) will add an optional AI layer that parses natural-language input into structured actions via Anthropic Claude. Phase 1 must be fully working and tested before phase 2 begins.
+The same package ships a second entry point — an MCP server (`todo-mcp`) — so Claude Code and other MCP clients can read and write the same list. The todo list functions as a shared work log between user and AI agents.
+
+Phase 2 (deferred) will add an optional in-app AI layer that parses natural-language REPL input into structured actions via Anthropic Claude. Phase 1 must be fully working and tested before phase 2 begins.
 
 ## Goals
 
@@ -16,21 +18,22 @@ Phase 2 (deferred) will add an optional AI layer that parses natural-language in
 - Persistent REPL feel ("kinda like Claude CLI"): launch once, stay in a prompt loop.
 - Slash commands cover every action; nothing requires AI.
 - Polished output: colors, tables, panels, spinners.
-- Clean module boundaries so phase-2 AI integration slots in without churning the core.
+- Same package ships an MCP server so external AI agents can read/write todos against the same data.
+- Clean module boundaries so phase-2 in-app AI integration slots in without churning the core.
 - High test coverage on storage and command logic.
 
 ## Non-Goals (phase 1)
 
-- Multi-user / sync / cloud — single-user, single-machine only.
-- Concurrent processes — last-writer-wins is acceptable; documented in README.
+- Multi-user / multi-machine sync — local-only.
+- Networked replication — concurrency between REPL and MCP server is in scope (file locking), but nothing crosses machines.
 - Recurring todos, subtasks, attachments — out of scope for v1.
-- AI / natural-language parsing — phase 2.
+- In-app natural-language parsing of free-form REPL input — phase 2. (External AI access via MCP is in phase 1.)
 - TUI (full-screen widgets) — REPL only.
 - Time-of-day on due dates — date-only.
 
 ## Architecture
 
-Single Python package, installable with `pip install -e .`, exposing a `todo` console script.
+Single Python package, installable with `pip install -e .`, exposing two console scripts: `todo` (REPL) and `todo-mcp` (MCP stdio server). Both share the same `Storage` against the same `todos.json`.
 
 ```
 todo-cli/
@@ -41,11 +44,12 @@ todo-cli/
 │   ├── __main__.py          # entry point: `python -m todo_cli` or `todo`
 │   ├── repl.py              # input loop + prompt_toolkit setup
 │   ├── commands.py          # slash command dispatcher + handlers
-│   ├── storage.py           # JSON file I/O behind a Storage class
+│   ├── storage.py           # JSON file I/O + file locking, behind a Storage class
 │   ├── models.py            # Todo dataclass + serialization
 │   ├── config.py            # ~/.todo/config.json (settings)
 │   ├── render.py            # rich-based output (tables, panels, spinners)
 │   ├── suggest.py           # fuzzy command suggestions
+│   ├── mcp_server.py        # stdio MCP server exposing Storage as tools
 │   └── errors.py            # typed exceptions
 └── tests/
     ├── test_storage.py
@@ -53,6 +57,7 @@ todo-cli/
     ├── test_commands.py
     ├── test_suggest.py
     ├── test_render.py
+    ├── test_mcp_server.py
     └── test_repl.py
 ```
 
@@ -60,14 +65,15 @@ todo-cli/
 
 - `repl.py` — owns input/output. Hands lines to `commands.py`, renders results via `render.py`. Receives `Storage` and `Config` instances from `__main__` rather than constructing them; reads from them only for prompt state (e.g., open-todo count).
 - `commands.py` — orchestrator. Parses slash commands, dispatches handlers, invokes `storage`, returns `CommandResult`.
-- `storage.py` — sole owner of the JSON file. Everyone else goes through it.
+- `storage.py` — sole owner of the JSON file. Wraps mutations in a file lock so REPL and MCP server can run concurrently.
 - `models.py` — `Todo` dataclass + (de)serialization. Pure.
 - `config.py` — `Config` dataclass + JSON persistence for user settings.
 - `render.py` — pure functions returning `rich` renderables.
 - `suggest.py` — pure fuzzy-match function. Stdlib only (`difflib`).
+- `mcp_server.py` — stdio MCP server. Constructs its own `Storage` instance pointed at the same JSON file the REPL uses. Tool handlers are thin shims over `Storage`; no command parsing, no rendering. Does not import `repl`, `commands`, `render`, or `suggest`.
 - `errors.py` — typed exception hierarchy.
 
-Each file is small enough to hold in one reader's head; `commands.py` and `storage.py` are the only modules with non-trivial logic.
+Each file is small enough to hold in one reader's head; `commands.py`, `storage.py`, and `mcp_server.py` are the only modules with non-trivial logic.
 
 ## Data model
 
@@ -120,7 +126,7 @@ class Storage:
 
 **Persistence strategy:** Atomic write. Every mutation writes the full JSON to `todos.json.tmp` then `os.replace()` over the real file — no partial writes if the process dies. Previous version kept as `todos.json.bak`. Acceptable up to ~10k todos.
 
-**Concurrency:** Single-process assumption. Two REPLs running concurrently → last-writer-wins. Documented in README, not solved in code.
+**Concurrency:** REPL and MCP server can run simultaneously, so writers can interleave. `Storage` reads and mutations run inside a file-lock context manager — `msvcrt.locking` on Windows, `fcntl.flock` on POSIX. Writes take an exclusive lock; reads take a shared lock; locks are held only across a single load+modify+atomic-write cycle (millisecond-scale). Stdlib only — no new deps. Lock granularity is the whole file; acceptable at this scale.
 
 **Schema versioning:** Top-level `version: 1` field. Loader rejects unknown versions with a clear error so future migrations have a hook.
 
@@ -189,9 +195,49 @@ Wraps `difflib.get_close_matches`. Two trigger points in `commands.py`:
    ```
    Auto-add is aborted to avoid creating a phantom todo from a typo. To add the literal text, the user retypes with an explicit `/add` prefix. Threshold is conservative (`cutoff=0.7`) so common words don't trigger.
 
+## MCP server (`mcp_server.py`)
+
+A second entry point packaged in the same module as the REPL. Run via:
+
+```
+todo-mcp
+```
+
+Communicates over stdio per the MCP standard. Registered in an MCP client's config (e.g., Claude Code's `settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "todo": { "command": "todo-mcp" }
+  }
+}
+```
+
+**Tools exposed** (1:1 with command handlers, but pre-parsed args from the SDK):
+
+| MCP tool | Backed by |
+|---|---|
+| `list_todos(done?, tag?, project?, overdue?, today?)` | `Storage.list` |
+| `add_todo(text, due?, priority?, tags?, project?)` | `Storage.add` |
+| `mark_done(id)` / `mark_undone(id)` | `Storage.update` |
+| `edit_todo(id, field, value)` | `Storage.update` |
+| `delete_todo(id)` | `Storage.delete` |
+| `show_todo(id)` | `Storage.get` |
+
+Each tool returns structured JSON (todo dicts or status strings). No rendering — that's the client's job.
+
+**Implementation:** Built on Anthropic's `mcp` Python SDK. Each tool handler is a thin shim:
+1. Receive arguments as a dict from the SDK.
+2. Call the corresponding `Storage` method.
+3. Serialize result via `Todo.to_dict()` (or raise — exceptions get mapped to MCP error responses).
+
+**Shared substrate:** The MCP server constructs its own `Storage` pointed at the canonical `todos.json`. The REPL does the same in its own process. File locking in `Storage` keeps them safe to interleave. The JSON file is the single source of truth — no caches, no in-memory replicas.
+
+**Error mapping:** `TodoNotFound` → MCP error with `code: "not_found"`. `BadCommandUsage` → `code: "invalid_args"`. `StorageCorrupt` / `SchemaMismatch` → `code: "internal"` and the server exits (we don't hand back inconsistent state). All others propagate.
+
 ## Error handling
 
-Operational errors keep the REPL alive. Integrity errors exit cleanly.
+Operational errors keep the REPL alive; integrity errors exit cleanly. The MCP server maps the same exception hierarchy to MCP error responses (see above).
 
 | Error | Source | User sees | REPL |
 |---|---|---|---|
@@ -222,26 +268,29 @@ TodoError
 
 **Per-module focus:**
 
-- **`storage.py`** — full coverage. CRUD round-trips; atomic-write behavior (kill-mid-save sim by patching `os.replace`); filtering; schema-version rejection; corrupt-file handling; backup restore. Real filesystem via `tmp_path` fixture.
+- **`storage.py`** — full coverage. CRUD round-trips; atomic-write behavior (kill-mid-save sim by patching `os.replace`); filtering; schema-version rejection; corrupt-file handling; backup restore; **file-lock contention** (two `Storage` instances against the same path interleaving writes — assert no torn state). Real filesystem via `tmp_path` fixture.
 - **`models.py`** — serialization round-trip table-driven tests.
 - **`commands.py`** — handler functions are pure: `(args, storage, config) → CommandResult`. Test each handler with a real in-memory `Storage` (tmp file). Cover happy paths + every error category.
 - **`suggest.py`** — pure function; table-driven tests for fuzzy thresholds.
 - **`render.py`** — light: assert renderables don't throw on edge inputs (empty list, very long text, unicode). Visual output not asserted.
 - **`repl.py`** — minimal: line dispatch (slash vs free-form auto-add), Ctrl+C/D handling. prompt_toolkit interaction stubbed at the session boundary.
+- **`mcp_server.py`** — each tool handler tested with a real `Storage` (tmp file), asserting JSON-serializable returns and error mapping. MCP framing/transport not tested here; that's SDK territory.
 
 **TDD:** Each module gets tests first per superpowers TDD discipline. Implementation plan reflects this.
 
-**Coverage:** ≥90% target on storage/commands/suggest. Lower acceptable elsewhere. Judgment over coverage worship.
+**Coverage:** ≥90% target on storage/commands/suggest/mcp_server. Lower acceptable elsewhere. Judgment over coverage worship.
 
-## Phase 2 — AI integration (deferred, sketch only)
+## Phase 2 — In-app AI parsing (deferred, sketch only)
 
-Trigger: phase 1 is fully implemented and tested.
+This is distinct from the phase-1 MCP server. The MCP server gives *external* AI agents access to the todo list. Phase 2 adds an *internal* AI layer that parses free-form REPL input from the user.
 
-**Seam:** `commands.py`'s free-form path is a single function. Phase 2 swaps that function's body to call `ai.parse(text) → Action`, mapping returned `Action` to the same internal handlers slash commands already use.
+Trigger: phase 1 (REPL + MCP) is fully implemented and tested.
+
+**Seam:** `commands.py`'s free-form path is a single function (currently auto-add). Phase 2 swaps that function's body to call `ai.parse(text) → Action`, mapping the returned `Action` to the same internal handlers slash commands already use.
 
 **Likely additions:**
 - `ai.py` — Anthropic SDK client, tool definitions matching command set, prompt caching (system + tools cached ephemeral), cost tracking.
-- New commands: `/ai on`, `/ai off`, `/cost`.
+- New REPL commands: `/ai on`, `/ai off`, `/cost`.
 - Config keys: `ai_on`, `model`.
 - Prompt indicator: `todo (12 open) [AI:on] >`.
 - Equivalent-command hint: when AI executes an action, also show the slash command form so the user can learn the manual syntax.
@@ -253,10 +302,14 @@ Trigger: phase 1 is fully implemented and tested.
 - `prompt_toolkit` and `rich` are large deps for a small tool. Acceptable trade — they deliver the polish requirement, both are stable.
 - Auto-add can surprise a user who expects a slash command and forgets the `/`. The suggest layer mitigates the typo case. Accept the residual risk.
 - Atomic write + JSON file is fine up to ~10k todos. If user grows past that, switch storage to SQLite behind the same `Storage` interface — contained change.
+- File locking is whole-file, not row-level. With only two writers (REPL + MCP) and millisecond-scale operations, contention is negligible. Documented as a known trade-off.
+- MCP SDK version churn: the `mcp` Python package is young. Pin a specific version in `pyproject.toml` and treat upgrades as deliberate.
 
 ## Appendix — pyproject summary (sketch)
 
 - Python ≥ 3.11 (for `Literal`, modern dataclasses, `tomllib`).
-- Runtime deps: `prompt_toolkit`, `rich`.
+- Runtime deps: `prompt_toolkit`, `rich`, `mcp` (pinned).
 - Dev deps: `pytest`, `pytest-cov`.
-- Console script: `todo = todo_cli.__main__:main`.
+- Console scripts:
+  - `todo = todo_cli.__main__:main` — REPL.
+  - `todo-mcp = todo_cli.mcp_server:main` — MCP stdio server.
