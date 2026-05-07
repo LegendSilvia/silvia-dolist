@@ -216,3 +216,25 @@ def test_del_removes(storage: Storage, config: Config):
 def test_del_missing_returns_error(storage: Storage, config: Config):
     result = run_command("/del 999", storage, config)
     assert "999" in str(result.renderable)
+
+
+def test_free_form_auto_adds(storage: Storage, config: Config):
+    result = run_command("buy milk", storage, config)
+    assert "Added" in str(result.renderable)
+    todos = storage.list()
+    assert todos[0].text == "buy milk"
+
+
+def test_free_form_typo_suggests_command(storage: Storage, config: Config):
+    result = run_command("lst", storage, config)
+    rendered = str(result.renderable)
+    assert "/list" in rendered
+    # No todo should have been added
+    assert storage.list(done=None) == []
+
+
+def test_free_form_with_dashes_does_not_break_argparse(storage: Storage, config: Config):
+    result = run_command("buy --milk and bread", storage, config)
+    assert "Added" in str(result.renderable)
+    todo = storage.list()[0]
+    assert todo.text == "buy --milk and bread"

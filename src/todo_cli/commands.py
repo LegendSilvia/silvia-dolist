@@ -61,8 +61,16 @@ def run_command(line: str, storage: Storage, config: Config) -> CommandResult:
 
 
 def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -> CommandResult:
-    # Placeholder; filled in Task 19.
-    return CommandResult(renderable=render.render_error("free-form not yet implemented"))
+    matches = suggest(tokens[0], KNOWN_COMMANDS)
+    if matches:
+        return CommandResult(
+            renderable=render.render_info(
+                f"Did you mean: {matches[0]}? (use /add {tokens[0]} to add as a todo)"
+            )
+        )
+    todo = Todo(id=0, text=line, created_at=datetime.now())
+    storage.add(todo)
+    return CommandResult(renderable=render.render_info(f"Added #{todo.id}: {line}"))
 
 
 HELP_TEXT = """\
