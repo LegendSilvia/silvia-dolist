@@ -93,3 +93,51 @@ def _handle_clear(args: list[str], storage: Storage, config: Config) -> CommandR
 @command("/quit")
 def _handle_exit(args: list[str], storage: Storage, config: Config) -> CommandResult:
     return CommandResult(exit=True)
+
+
+import argparse
+from datetime import date, datetime
+
+from todo_cli.errors import BadCommandUsage
+from todo_cli.models import Todo
+
+
+def _parse_or_raise(parser: argparse.ArgumentParser, args: list[str]):
+    try:
+        return parser.parse_args(args)
+    except argparse.ArgumentError as e:
+        raise BadCommandUsage(f"{parser.prog}: {e}") from e
+    except SystemExit as e:
+        # exit_on_error=False stops most exits, but argparse may still raise
+        # SystemExit on -h or required-arg failures depending on version.
+        raise BadCommandUsage(f"{parser.prog}: invalid arguments") from e
+
+
+def _add_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="/add", exit_on_error=False, add_help=False,
+    )
+    p.add_argument("text", nargs="+")
+    p.add_argument("--due", type=date.fromisoformat, default=None)
+    p.add_argument("--priority", choices=["low", "med", "high"], default=None)
+    p.add_argument("--tags", default="")
+    p.add_argument("--project", default=None)
+    return p
+
+
+@command("/add")
+def _handle_add(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    ns = _parse_or_raise(_add_parser(), args)
+    text = " ".join(ns.text)
+    tags = [t.strip() for t in ns.tags.split(",") if t.strip()]
+    todo = Todo(
+        id=0,
+        text=text,
+        created_at=datetime.now(),
+        due=ns.due,
+        priority=ns.priority,
+        tags=tags,
+        project=ns.project,
+    )
+    storage.add(todo)
+    return CommandResult(renderable=render.render_info(f"Added #{todo.id}: {text}"))
