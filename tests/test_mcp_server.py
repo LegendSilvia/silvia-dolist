@@ -88,3 +88,9 @@ def test_edit_unknown_field_raises(storage: Storage):
     tool_add_todo(storage, {"text": "x"})
     with pytest.raises(BadCommandUsage):
         tool_edit_todo(storage, {"id": 1, "field": "banana", "value": "y"})
+
+
+def test_build_server_constructs(storage: Storage):
+    from todo_cli.mcp_server import build_server
+    server = build_server(storage)
+    assert server is not None
