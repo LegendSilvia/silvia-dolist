@@ -168,3 +168,40 @@ def test_undo_clears_completed(storage: Storage, config: Config):
 def test_done_missing_id_returns_error(storage: Storage, config: Config):
     result = run_command("/done 999", storage, config)
     assert "999" in str(result.renderable)
+
+
+def test_edit_text(storage: Storage, config: Config):
+    run_command("/add original", storage, config)
+    run_command("/edit 1 text new text", storage, config)
+    assert storage.get(1).text == "new text"
+
+
+def test_edit_due(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/edit 1 due 2026-12-31", storage, config)
+    assert storage.get(1).due == date(2026, 12, 31)
+
+
+def test_edit_priority_valid(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/edit 1 priority high", storage, config)
+    assert storage.get(1).priority == "high"
+
+
+def test_edit_priority_invalid_errors(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    result = run_command("/edit 1 priority extreme", storage, config)
+    assert "priority" in str(result.renderable).lower()
+
+
+def test_edit_tags(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    run_command("/edit 1 tags work,urgent", storage, config)
+    assert storage.get(1).tags == ["work", "urgent"]
+
+
+def test_edit_unknown_field_errors(storage: Storage, config: Config):
+    run_command("/add x", storage, config)
+    result = run_command("/edit 1 banana yes", storage, config)
+    rendered = str(result.renderable).lower()
+    assert "field" in rendered or "banana" in rendered

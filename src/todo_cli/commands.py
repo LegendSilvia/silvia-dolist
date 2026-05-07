@@ -198,3 +198,33 @@ def _handle_undo(args: list[str], storage: Storage, config: Config) -> CommandRe
     tid = _parse_id(args, "/undo")
     storage.update(tid, done=False)
     return CommandResult(renderable=render.render_info(f"Marked #{tid} not done"))
+
+
+@command("/edit")
+def _handle_edit(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    if len(args) < 3:
+        raise BadCommandUsage("/edit <id> <field> <value>")
+    try:
+        tid = int(args[0])
+    except ValueError as e:
+        raise BadCommandUsage("/edit <id> <field> <value> — id must be an integer") from e
+    field = args[1]
+    raw_value = " ".join(args[2:])
+    value: Any
+    if field == "due":
+        try:
+            value = date.fromisoformat(raw_value)
+        except ValueError as e:
+            raise BadCommandUsage(f"due must be YYYY-MM-DD: {e}") from e
+    elif field == "priority":
+        if raw_value not in {"low", "med", "high"}:
+            raise BadCommandUsage("priority must be low, med, or high")
+        value = raw_value
+    elif field == "tags":
+        value = [v.strip() for v in raw_value.split(",") if v.strip()]
+    elif field == "done":
+        value = raw_value.lower() in {"true", "yes", "1"}
+    else:
+        value = raw_value
+    storage.update(tid, **{field: value})
+    return CommandResult(renderable=render.render_info(f"Updated #{tid}.{field}"))
