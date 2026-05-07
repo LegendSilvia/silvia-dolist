@@ -92,3 +92,33 @@ class Storage:
                 self._write(next_id, todos)
                 return t
         raise TodoNotFound(f"No todo with id {id}")
+
+    def list(
+        self,
+        *,
+        done: bool | None = None,
+        tag: str | None = None,
+        project: str | None = None,
+        overdue: bool = False,
+        today: bool = False,
+    ) -> list[Todo]:
+        from datetime import date as _date
+
+        _, todos = self._read()
+        results = list(todos)
+        if done is not None:
+            results = [t for t in results if t.done == done]
+        if tag is not None:
+            results = [t for t in results if tag in t.tags]
+        if project is not None:
+            results = [t for t in results if t.project == project]
+        if overdue:
+            cutoff = _date.today()
+            results = [
+                t for t in results
+                if t.due is not None and t.due < cutoff and not t.done
+            ]
+        if today:
+            cutoff = _date.today()
+            results = [t for t in results if t.due == cutoff]
+        return results

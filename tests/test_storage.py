@@ -132,3 +132,71 @@ def test_update_missing_id_raises(storage_path: Path):
     s.load()
     with pytest.raises(TodoNotFound):
         s.update(999, text="x")
+
+
+from datetime import date
+
+
+def test_list_all(storage_path: Path):
+    s = Storage(storage_path)
+    s.add(_make_todo("a"))
+    s.add(_make_todo("b"))
+    assert len(s.list()) == 2
+
+
+def test_list_filter_done(storage_path: Path):
+    s = Storage(storage_path)
+    a = s.add(_make_todo("a"))
+    s.add(_make_todo("b"))
+    s.update(a.id, done=True)
+    assert len(s.list(done=True)) == 1
+    assert len(s.list(done=False)) == 1
+
+
+def test_list_filter_tag(storage_path: Path):
+    s = Storage(storage_path)
+    t = _make_todo("a")
+    t.tags = ["work"]
+    s.add(t)
+    s.add(_make_todo("b"))
+    assert [x.text for x in s.list(tag="work")] == ["a"]
+
+
+def test_list_filter_project(storage_path: Path):
+    s = Storage(storage_path)
+    t = _make_todo("a")
+    t.project = "p1"
+    s.add(t)
+    s.add(_make_todo("b"))
+    assert [x.text for x in s.list(project="p1")] == ["a"]
+
+
+def test_list_overdue(storage_path: Path):
+    s = Storage(storage_path)
+    past = _make_todo("a")
+    past.due = date(2020, 1, 1)
+    future = _make_todo("b")
+    future.due = date(2099, 1, 1)
+    s.add(past)
+    s.add(future)
+    assert [x.text for x in s.list(overdue=True)] == ["a"]
+
+
+def test_list_overdue_excludes_done(storage_path: Path):
+    s = Storage(storage_path)
+    past = _make_todo("a")
+    past.due = date(2020, 1, 1)
+    a = s.add(past)
+    s.update(a.id, done=True)
+    assert s.list(overdue=True) == []
+
+
+def test_list_today(storage_path: Path):
+    s = Storage(storage_path)
+    today_t = _make_todo("today")
+    today_t.due = date.today()
+    other = _make_todo("other")
+    other.due = date(2099, 1, 1)
+    s.add(today_t)
+    s.add(other)
+    assert [x.text for x in s.list(today=True)] == ["today"]
