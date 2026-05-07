@@ -91,3 +91,44 @@ def test_delete_missing_raises(storage_path: Path):
     s.load()
     with pytest.raises(TodoNotFound):
         s.delete(7)
+
+
+from todo_cli.errors import BadCommandUsage
+
+
+def test_update_text(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("old"))
+    s.update(t.id, text="new")
+    assert s.get(t.id).text == "new"
+
+
+def test_update_done_sets_completed_at(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("x"))
+    assert s.get(t.id).completed_at is None
+    s.update(t.id, done=True)
+    assert s.get(t.id).completed_at is not None
+    assert s.get(t.id).done is True
+
+
+def test_update_undone_clears_completed_at(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("x"))
+    s.update(t.id, done=True)
+    s.update(t.id, done=False)
+    assert s.get(t.id).completed_at is None
+
+
+def test_update_rejects_unknown_field(storage_path: Path):
+    s = Storage(storage_path)
+    t = s.add(_make_todo("x"))
+    with pytest.raises(BadCommandUsage):
+        s.update(t.id, bogus="y")
+
+
+def test_update_missing_id_raises(storage_path: Path):
+    s = Storage(storage_path)
+    s.load()
+    with pytest.raises(TodoNotFound):
+        s.update(999, text="x")
