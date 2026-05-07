@@ -87,3 +87,39 @@ def test_add_invalid_priority_errors(storage: Storage, config: Config):
     result = run_command("/add foo --priority extreme", storage, config)
     rendered = str(result.renderable)
     assert "priority" in rendered.lower() or "invalid" in rendered.lower()
+
+
+def test_list_default_shows_open_only(storage: Storage, config: Config):
+    run_command("/add a", storage, config)
+    run_command("/add b", storage, config)
+    a = storage.list()[0]
+    storage.update(a.id, done=True)
+    result = run_command("/list", storage, config)
+    rendered = str(result.renderable)
+    # default = open only; "a" is done, "b" is open
+    assert "b" in rendered
+    assert "Todos (1)" in rendered
+
+
+def test_list_all(storage: Storage, config: Config):
+    run_command("/add a", storage, config)
+    run_command("/add b", storage, config)
+    storage.update(storage.list()[0].id, done=True)
+    result = run_command("/list --all", storage, config)
+    assert "Todos (2)" in str(result.renderable)
+
+
+def test_list_done_only(storage: Storage, config: Config):
+    run_command("/add a", storage, config)
+    storage.update(storage.list()[0].id, done=True)
+    result = run_command("/list --done", storage, config)
+    assert "Todos (1)" in str(result.renderable)
+
+
+def test_list_filter_tag(storage: Storage, config: Config):
+    run_command("/add work-task --tags work", storage, config)
+    run_command("/add home-task --tags home", storage, config)
+    result = run_command("/list --tag work", storage, config)
+    rendered = str(result.renderable)
+    assert "work-task" in rendered
+    assert "home-task" not in rendered

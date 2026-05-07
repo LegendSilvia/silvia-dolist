@@ -137,3 +137,35 @@ def _handle_add(args: list[str], storage: Storage, config: Config) -> CommandRes
     )
     storage.add(todo)
     return CommandResult(renderable=render.render_info(f"Added #{todo.id}: {text}"))
+
+
+def _list_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="/list", exit_on_error=False, add_help=False,
+    )
+    p.add_argument("--all", action="store_true")
+    p.add_argument("--done", action="store_true")
+    p.add_argument("--tag", default=None)
+    p.add_argument("--project", default=None)
+    p.add_argument("--overdue", action="store_true")
+    p.add_argument("--today", action="store_true")
+    return p
+
+
+@command("/list")
+def _handle_list(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    ns = _parse_or_raise(_list_parser(), args)
+    if ns.all:
+        done_filter: bool | None = None
+    elif ns.done:
+        done_filter = True
+    else:
+        done_filter = False
+    todos = storage.list(
+        done=done_filter,
+        tag=ns.tag,
+        project=ns.project,
+        overdue=ns.overdue,
+        today=ns.today,
+    )
+    return CommandResult(renderable=render.render_todo_list(todos))

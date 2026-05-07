@@ -1,11 +1,29 @@
 from __future__ import annotations
+import io
 from datetime import date as _date
 
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from todo_cli.models import Todo
+
+
+class RenderableTable:
+    """Wraps a rich Table and provides a plain-text __str__ for testing."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def __str__(self) -> str:
+        buf = io.StringIO()
+        console = Console(file=buf, highlight=False, no_color=True, width=200)
+        console.print(self._table)
+        return buf.getvalue()
+
+    def __rich_console__(self, console, options):
+        yield self._table
 
 _PRIORITY_ORDER = {"high": 0, "med": 1, "low": 2}
 _MAX_DATE = _date(9999, 12, 31)
@@ -19,7 +37,7 @@ def _sort_key(t: Todo):
     )
 
 
-def render_todo_list(todos: list[Todo]) -> Table:
+def render_todo_list(todos: list[Todo]) -> RenderableTable:
     table = Table(title=f"Todos ({len(todos)})", show_lines=False)
     table.add_column("ID", justify="right", style="cyan")
     table.add_column("Done", justify="center")
@@ -38,7 +56,7 @@ def render_todo_list(todos: list[Todo]) -> Table:
             ", ".join(t.tags),
             t.text,
         )
-    return table
+    return RenderableTable(table)
 
 
 def render_todo_detail(t: Todo) -> Panel:
