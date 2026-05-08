@@ -11,6 +11,7 @@ from todo_cli.models import Todo
 from todo_cli.parse_text import parse_input
 from todo_cli.storage import Storage
 from todo_cli.suggest import suggest
+from todo_cli import ask as ask_mod
 from todo_cli import render
 
 
@@ -34,7 +35,7 @@ def command(name: str) -> Callable[[Handler], Handler]:
 
 KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
-    "/help", "/clear", "/exit", "/quit",
+    "/ask", "/help", "/clear", "/exit", "/quit",
 ]
 
 
@@ -88,11 +89,14 @@ def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -
 HELP_TEXT = """\
 /add <text>          add (text is parsed for date/priority/#tags/@project)
 /list [--all|--done|--tag X|--project P|--overdue|--today]
-/show <id>           details
-/done <id>           mark complete
-/undo <id>           mark incomplete
-/edit <id> <field> <value>
-/del <id>            delete
+/show [id]           detail (id optional in TUI: uses ↑↓ selection)
+/done [id]           mark complete
+/undo [id]           mark incomplete
+/edit [id] <field> <value>     fields: text, description, due, due_time,
+                                priority, tags, project, done
+/del [id]            delete
+/ask [id]            open new terminal with claude + copy a prompt
+                     about the todo (uses text, description, due, etc.)
 /help                this list
 /clear               clear screen
 /exit, /quit         save and exit
@@ -100,7 +104,7 @@ HELP_TEXT = """\
 natural language is parsed before flags. examples:
   finish report by friday #work @q2 p1
   buy milk tmr
-  call dentist next monday
+  call dentist tonight
 explicit --flags always win.
 """
 
@@ -273,3 +277,23 @@ def _handle_del(args: list[str], storage: Storage, config: Config) -> CommandRes
     tid = _parse_id(args, "/del")
     storage.delete(tid)
     return CommandResult(renderable=render.render_info(f"Deleted #{tid}"))
+
+
+@command("/ask")
+def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    tid = _parse_id(args, "/ask")
+    todo = storage.get(tid)
+    prompt = ask_mod.build_prompt(todo)
+    copied = ask_mod.copy_to_clipboard(prompt)
+    opened = ask_mod.open_terminal_with_claude()
+    bits = []
+    if copied:
+        bits.append("prompt copied to clipboard")
+    else:
+        bits.append("could not copy to clipboard (no clip/pbcopy/xclip found)")
+    if opened:
+        bits.append("opened new terminal with claude — paste with Ctrl+V")
+    else:
+        bits.append("could not launch new terminal")
+    msg = f"/ask #{tid}: " + "; ".join(bits)
+    return CommandResult(renderable=render.render_info(msg))

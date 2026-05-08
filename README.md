@@ -1,6 +1,8 @@
 # todo-cli
 
-A personal todo CLI with a persistent REPL and an MCP server, sharing one local JSON file. Designed for daily use; no cloud, no account.
+A personal todo app with a full-screen TUI and an MCP server, sharing one local JSON file. Designed for daily use; no cloud, no account.
+
+The TUI shows a live landscape (sun/moon/clock/clouds), the open todo list, and an input line. AI agents can read and write the same data via MCP so you can hand a todo over to Claude with one command.
 
 ## Install
 
@@ -8,56 +10,114 @@ A personal todo CLI with a persistent REPL and an MCP server, sharing one local 
 pip install -e .[dev]
 ```
 
-This installs two console scripts: `todo` (REPL) and `todo-mcp` (MCP stdio server).
+Installs two console scripts: `todo` (TUI / one-shot CLI) and `todo-mcp` (MCP stdio server).
 
-## Use the REPL
+## Quick start
 
 ```powershell
-todo
+todo                          # full-screen TUI
+todo /list                    # one-shot: print the list and exit
+todo buy milk tomorrow #shop  # one-shot: add a todo and exit
 ```
 
-You'll get a prompt like:
+## TUI controls
+
+The TUI is a full-screen layout: landscape on top, todo list, last command output, hint line, input prompt.
+
+**Selection (when input is empty):**
+- **↑ / ↓** — move the `›` cursor up and down the open list.
+- **space** — toggle done on the selected todo (reversible).
+- **enter** — open detail of the selected todo.
+
+**Commands** are typed at the input. Slash-prefixed; ID is optional when something is selected.
+
+**Quit:** `Ctrl-D` or type `/exit`.
+
+Raw alphabet keys never act on the list — they go to the input. So you can never lose data by pressing one wrong letter.
+
+## Slash commands
+
+ID is optional when an item is selected; the command operates on the selected row. `[id]` below means optional in the TUI.
+
+| Command | Effect |
+|---|---|
+| `/add <text>` | Add a new todo. Text is parsed for date, priority, `#tags`, `@project`. |
+| `/list [--all\|--done\|--tag X\|--project P\|--overdue\|--today]` | List todos. Default is open only. |
+| `/show [id]` | Detail view (title, description, due, tags, project, timestamps). |
+| `/done [id]` | Mark done. |
+| `/undo [id]` | Mark not done. |
+| `/edit [id] <field> <value>` | Update one field. See fields below. |
+| `/del [id]` | Delete. |
+| `/ask [id]` | Open a new terminal with `claude`, copy a prompt about the todo to your clipboard so you can paste it in. |
+| `/help` | Command summary. |
+| `/clear` | Clear the output panel. |
+| `/exit`, `/quit` | Save and exit. |
+
+**Editable fields:** `text`, `description`, `due`, `due_time`, `priority` (`low`/`med`/`high`), `tags` (comma-separated), `project`, `done`. Use `/edit due_time none` to clear a time.
+
+## Free-form input (natural language)
+
+Anything you type without a leading `/` becomes an `/add`. Before storing, the line is parsed for:
+
+- **Dates:** `tomorrow`, `next monday`, `friday`, `in 3 days`, `2026-05-15`, plus short forms `tmr`, `tdy`, `eod`, `eow`, `eom`.
+- **Times:** `tonight`, `this evening`, `at 3pm`, `5pm`. Captured into `due_time` so the list shows e.g. `Fri May 08 18:00`.
+- **Priority:** `urgent`, `p1`, `high priority` → high. `p2`, `med priority` → med. `p3`, `low priority` → low.
+- **Tags:** `#tag`.
+- **Project:** `@project`.
+
+Examples:
 
 ```
-todo (0 open) >
+finish report by friday #work @q2 p1
+buy milk tmr
+call dentist tonight
+review pr next monday at 9am
 ```
 
-Type slash commands or free-form text:
+The parser is conservative: a date phrase is only stripped if it sits at the end of the line or follows a trigger word (`due`, `by`, `on`, `before`, `after`). Mid-sentence dates (`remember tomorrow's meeting`) are left in the title untouched. Explicit `--flags` always win over the parsed values.
 
-- `/add buy milk --due 2026-05-08 --priority high --tags home` — add with metadata.
-- `buy bread` — free-form text auto-adds as a todo.
-- `/list` — open todos. `/list --all`, `/list --done`, `/list --tag work`, `/list --overdue`, `/list --today`.
-- `/show <id>` — detail panel.
-- `/done <id>` / `/undo <id>` — toggle completion.
-- `/edit <id> <field> <value>` — fields: `text`, `due`, `priority`, `tags`, `project`, `done`.
-- `/del <id>` — delete.
-- `/help`, `/clear`, `/exit` (or `/quit`).
+## Due-date colors
 
-Typos like `lst` or `/dn` get suggestions instead of being added as todos.
+The list color-codes the due indicator by how close the deadline is:
 
-## Use from Claude Code or another MCP client
+| State | Color |
+|---|---|
+| Overdue | bold red |
+| Within the next hour | bold orange |
+| Later today | yellow |
+| Tomorrow | warm tan |
+| This week | default |
+| Further out / no due | dim |
 
-Register the server in your MCP client config. For Claude Code (`%USERPROFILE%\.claude\settings.json`):
+## /ask — hand a todo to Claude
 
-```json
-{
-  "mcpServers": {
-    "todo": { "command": "todo-mcp" }
-  }
-}
-```
+`/ask` takes a todo, builds a prompt that includes the title, description, due, priority, tags, and project, copies it to your clipboard, and opens a new terminal running `claude`. Paste with `Ctrl-V` and you're talking to Claude with the full context.
 
-Tools exposed: `list_todos`, `add_todo`, `show_todo`, `mark_done`, `mark_undone`, `edit_todo`, `delete_todo`.
+**Two-step flow.** `/ask` is gated behind a detail view so you confirm what's about to be sent off:
+
+1. Select the todo with ↑/↓.
+2. Press **Enter** to open its detail panel — review what's there.
+3. Type `/ask` and Enter. The prompt goes to your clipboard and a new terminal pops up with `claude`.
+
+If you call `/ask` without first viewing the detail (or if you've moved the selection / done another command since), the TUI will tell you to press Enter first. Add an explicit ID (`/ask 7`) and view that ID's detail (`/show 7`) if you want to keep the selection elsewhere.
+
+Requirements:
+- `claude` must be on your PATH (Claude Code).
+- Clipboard: Windows uses `clip.exe` (built-in). macOS uses `pbcopy`. Linux tries `xclip` then `xsel`.
+- New terminal: Windows tries Windows Terminal (`wt`) then falls back to `cmd`. macOS uses `osascript` + Terminal.app. Linux tries common emulators (`gnome-terminal`, `konsole`, `xterm`).
+
+If a step fails (no clipboard, no terminal launcher), `/ask` reports what worked and what didn't — the prompt is still in the output you can copy manually.
 
 ## Storage
 
-- File: `%USERPROFILE%\.todo\todos.json` (Windows) or `~/.todo/todos.json` (POSIX).
-- Atomic writes; `.bak` file preserved each save; sidecar `.lock` file coordinates REPL + MCP concurrency.
-- Schema versioned (`version: 1`); future builds migrate or refuse incompatible files.
+- **File:** `%USERPROFILE%\.todo\todos.json` (Windows) or `~/.todo/todos.json` (POSIX).
+- Atomic writes (`os.replace`); a `.bak` is kept beside the live file each save.
+- Sidecar `.lock` file coordinates concurrent access between the TUI and the MCP server.
+- Schema is versioned (`version: 1`). Unknown fields in old JSON are tolerated, so adding new optional fields (like `description`, `due_time`) doesn't require migration.
 
 ## Concurrency
 
-The REPL and MCP server can run simultaneously against the same file. Mutations are serialized via an OS file lock. Don't run multiple REPLs as a habit — it works, but the prompt's open-count is only refreshed at your prompt.
+The TUI and the MCP server can run simultaneously against the same file. Mutations are serialized through an OS file lock (`msvcrt` on Windows, `fcntl` elsewhere). Reads inside the TUI are debounced by the prompt_toolkit refresh interval (2 s).
 
 ## Tests
 
@@ -65,6 +125,27 @@ The REPL and MCP server can run simultaneously against the same file. Mutations 
 pytest
 ```
 
-## Roadmap
+## Project layout
 
-Phase 2 (deferred): in-app AI parsing of free-form input via Anthropic Claude with prompt caching. Will go through its own brainstorm → spec → plan cycle.
+```
+src/todo_cli/
+  __main__.py     entry point: TUI when no args, one-shot otherwise
+  tui.py          full-screen prompt_toolkit Application
+  repl.py         older scrolling REPL (kept as fallback)
+  commands.py     slash command handlers, free-form add
+  parse_text.py   natural-language extraction (dates, tags, priority)
+  render.py       clack-style renderers (gutter blocks, list, detail)
+  symbols.py      unicode glyphs + ASCII fallbacks
+  sky.py          decorative landscape (sun/moon/stars/clock/clouds)
+  ask.py          /ask helper (clipboard + new terminal)
+  storage.py      JSON storage with file locking
+  models.py       Todo dataclass + JSON round-trip
+  config.py       optional user config (forward-compat)
+  mcp_server.py   MCP stdio server exposing todo tools
+  errors.py       typed exceptions
+  suggest.py      typo suggestions for slash commands
+```
+
+## For AI agents
+
+See [AGENTS.md](AGENTS.md) for the MCP tool surface and recommended usage patterns.

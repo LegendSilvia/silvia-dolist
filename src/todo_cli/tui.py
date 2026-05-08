@@ -59,9 +59,24 @@ class _State:
     def __init__(self) -> None:
         self.last_result: Optional[CommandResult] = None
         self.selected_index: int = 0
+        # Tracks which todo's detail panel has been opened most recently.
+        # /ask requires viewing the detail first, so the user has a moment
+        # to confirm what's about to be handed off to Claude.
+        self.last_viewed_id: Optional[int] = None
 
 
-_ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del"}
+_ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask"}
+
+
+def _extract_command_id(line: str) -> Optional[int]:
+    """Pull the numeric id out of a slash command, after autofill."""
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
+    except ValueError:
+        return None
 
 
 def _autofill_selected_id(line: str, sel_id: Optional[int]) -> str:
@@ -172,7 +187,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return ANSI("")
         return FormattedText([
             ("ansibrightblack",
-             "  ↑↓ select  ·  /done /undo /show /del to act on selected  ·  /edit text NEW to rename  ·  ctrl-d quit"),
+             "  ↑↓ select  ·  space toggle  ·  enter detail  ·  /done /del /edit act on selected  ·  /ask after enter  ·  ctrl-d quit"),
         ])
 
     hints_window = Window(
@@ -208,15 +223,42 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     def _enter(event):
         line = input_buffer.text.strip()
         if not line:
+            # Empty + Enter: open detail of selected todo and arm /ask.
+            sel = _selected_todo()
+            if sel is not None:
+                state.last_viewed_id = sel.id
+                state.last_result = run_command(f"/show {sel.id}", storage, config)
             return
         sel = _selected_todo()
         line = _autofill_selected_id(line, sel.id if sel else None)
+
+        # /ask requires that the user has just viewed the detail — gives a
+        # beat to read what's about to be handed off to Claude.
+        if line.startswith("/ask"):
+            target_id = _extract_command_id(line)
+            if target_id is None or state.last_viewed_id != target_id:
+                input_buffer.reset()
+                state.last_result = CommandResult(
+                    renderable=render.render_warn(
+                        "Press enter to view the todo's detail first, then /ask."
+                    )
+                )
+                return
+
         input_buffer.reset()
         result = run_command(line, storage, config)
         if result.clear:
             state.last_result = None
         else:
             state.last_result = result
+        # /show updates last_viewed_id; other commands invalidate the prior
+        # view so /ask requires a fresh look.
+        if line.startswith("/show"):
+            shown_id = _extract_command_id(line)
+            if shown_id is not None:
+                state.last_viewed_id = shown_id
+        else:
+            state.last_viewed_id = None
         if result.exit:
             event.app.exit()
 
@@ -228,6 +270,14 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     def _down(event):
         todos = _visible_todos()
         state.selected_index = min(max(0, len(todos) - 1), state.selected_index + 1)
+
+    @kb.add("space", filter=empty_input)
+    def _toggle_done(event):
+        # Space (non-alphabet) is safe — toggling done is reversible.
+        sel = _selected_todo()
+        if sel is None:
+            return
+        storage.update(sel.id, done=not sel.done)
 
     @kb.add("c-c")
     @kb.add("c-d")

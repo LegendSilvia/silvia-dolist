@@ -189,6 +189,9 @@ def render_todo_list(
         glyph = Text(S.SUBMIT if t.done else S.RADIO_OFF, style=glyph_style)
         id_text = Text(f"#{t.id}", style=S.S_ID)
         text_cell = Text(t.text, style=S.S_DIM if t.done else "")
+        if t.description:
+            text_cell.append("  ")
+            text_cell.append("ⓘ", style=S.S_DIM)
         meta = []
         if t.tags:
             meta.append(" ".join(f"#{x}" for x in t.tags))
@@ -221,6 +224,9 @@ def render_todo_detail(t: Todo) -> RenderableType:
     if t.done:
         title.stylize(S.S_DIM)
     lines.append(title)
+    if t.description:
+        lines.append(Text(""))
+        lines.append(Text(t.description, style=S.S_DIM if t.done else ""))
     lines.append(Text(""))
 
     facts: list[Text] = []

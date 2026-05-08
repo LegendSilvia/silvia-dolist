@@ -308,3 +308,26 @@ def test_render_list_marks_selected_row(storage: Storage, config: Config):
     rendered = _render(render_todo_list(todos, selected_id=sel_id))
     # cursor glyph appears next to the selected row
     assert "›" in rendered
+
+
+def test_edit_description(storage: Storage, config: Config):
+    run_command("/add deploy service", storage, config)
+    run_command("/edit 1 description needs-canary-then-full-rollout", storage, config)
+    assert storage.get(1).description == "needs-canary-then-full-rollout"
+
+
+def test_show_includes_description(storage: Storage, config: Config):
+    run_command("/add deploy service", storage, config)
+    run_command("/edit 1 description rollback plan ready", storage, config)
+    result = run_command("/show 1", storage, config)
+    assert "rollback plan ready" in _render(result.renderable)
+
+
+def test_list_marks_todos_with_description(storage: Storage, config: Config):
+    run_command("/add task one", storage, config)
+    run_command("/add task two", storage, config)
+    run_command("/edit 1 description some notes here", storage, config)
+    result = run_command("/list", storage, config)
+    rendered = _render(result.renderable)
+    # Indicator glyph appears for the one with a description
+    assert "ⓘ" in rendered
