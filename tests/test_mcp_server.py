@@ -15,6 +15,7 @@ from todo_cli.mcp_server import (
     tool_list_todos,
     tool_mark_done,
     tool_mark_undone,
+    tool_note_todo,
     tool_show_todo,
 )
 from todo_cli.storage import Storage
@@ -216,3 +217,69 @@ def test_mcp_call_tool_unknown_tool_returns_error_result(storage: Storage):
     if hasattr(result, "root"):
         result = result.root
     assert result.isError is True
+
+
+# ---------------------------------------------------------------------------
+# New-field coverage: description, due_time, note_todo
+# ---------------------------------------------------------------------------
+
+def test_add_todo_with_description(storage: Storage):
+    result = tool_add_todo(storage, {"text": "x", "description": "long context"})
+    assert result["description"] == "long context"
+
+
+def test_add_todo_with_due_time(storage: Storage):
+    result = tool_add_todo(storage, {
+        "text": "meeting", "due": "2026-05-15", "due_time": "17:00",
+    })
+    assert result["due_time"] == "17:00"
+
+
+def test_edit_todo_description(storage: Storage):
+    tool_add_todo(storage, {"text": "x"})
+    result = tool_edit_todo(storage, {"id": 1, "field": "description", "value": "new"})
+    assert result["description"] == "new"
+
+
+def test_edit_todo_due_time(storage: Storage):
+    tool_add_todo(storage, {"text": "x"})
+    result = tool_edit_todo(storage, {"id": 1, "field": "due_time", "value": "09:30"})
+    assert result["due_time"] == "09:30"
+
+
+def test_edit_todo_due_time_clear(storage: Storage):
+    tool_add_todo(storage, {"text": "x", "due_time": "09:30"})
+    result = tool_edit_todo(storage, {"id": 1, "field": "due_time", "value": None})
+    assert result["due_time"] is None
+
+
+def test_edit_todo_claude_session(storage: Storage):
+    tool_add_todo(storage, {"text": "x"})
+    result = tool_edit_todo(
+        storage, {"id": 1, "field": "claude_session", "value": "todo-1-abc12345"}
+    )
+    assert result["claude_session"] == "todo-1-abc12345"
+
+
+def test_note_todo_appends_to_empty_description(storage: Storage):
+    tool_add_todo(storage, {"text": "x"})
+    result = tool_note_todo(storage, {"id": 1, "text": "first note"})
+    assert "first note" in result["description"]
+    assert "[" in result["description"]  # timestamp
+
+
+def test_note_todo_does_not_clobber(storage: Storage):
+    tool_add_todo(storage, {"text": "x", "description": "kept"})
+    result = tool_note_todo(storage, {"id": 1, "text": "appended"})
+    assert "kept" in result["description"]
+    assert "appended" in result["description"]
+
+
+def test_note_todo_via_call_tool(storage: Storage):
+    server = build_server(storage)
+    _call_tool_via_server(server, "add_todo", {"text": "x"})
+    content = _call_tool_via_server(
+        server, "note_todo", {"id": 1, "text": "logged note"}
+    )
+    payload = json.loads(content[0].text)
+    assert "logged note" in payload["description"]

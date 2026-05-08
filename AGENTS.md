@@ -52,9 +52,9 @@ Returns: array of todo objects.
 ### `add_todo`
 Create a new todo.
 - `text` (required): string
-- `description`: string
-- `due`: ISO date string
-- `due_time`: ISO time string
+- `description`: string (multi-line context the title can't carry)
+- `due`: ISO date string (`YYYY-MM-DD`)
+- `due_time`: ISO time string (`HH:MM`)
 - `priority`: `"low"` | `"med"` | `"high"`
 - `tags`: string[]
 - `project`: string
@@ -73,9 +73,19 @@ Returns: the updated todo.
 
 ### `edit_todo`
 - `id` (required): int
-- Any subset of mutable fields: `text`, `description`, `due`, `due_time`, `priority`, `tags`, `project`, `done`.
+- `field` (required): one of `text`, `description`, `done`, `due`, `due_time`, `priority`, `tags`, `project`, `claude_session`
+- `value` (required): the new value (use `null` to clear nullable fields)
 
 Returns: the updated todo.
+
+**Note:** editing `description` *replaces* the whole field. Use `note_todo` instead when adding notes across turns.
+
+### `note_todo`
+Append a timestamped note to a todo's description without losing prior content.
+- `id` (required): int
+- `text` (required): string
+
+Returns: the updated todo with the new description (existing content preserved, blank line + `[YYYY-MM-DD HH:MM] text` appended).
 
 ### `delete_todo`
 - `id` (required): int.

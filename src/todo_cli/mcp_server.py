@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import json
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -23,17 +23,21 @@ from todo_cli.storage import Storage
 def tool_add_todo(storage: Storage, args: dict[str, Any]) -> dict[str, Any]:
     text = args["text"]
     due = date.fromisoformat(args["due"]) if args.get("due") else None
+    due_time = time.fromisoformat(args["due_time"]) if args.get("due_time") else None
     priority = args.get("priority")
     tags = list(args.get("tags") or [])
     project = args.get("project")
+    description = args.get("description")
     todo = Todo(
         id=0,
         text=text,
         created_at=datetime.now(),
         due=due,
+        due_time=due_time,
         priority=priority,
         tags=tags,
         project=project,
+        description=description,
     )
     storage.add(todo)
     return todo.to_dict()
@@ -67,13 +71,26 @@ def tool_edit_todo(storage: Storage, args: dict[str, Any]) -> dict[str, Any]:
     value = args["value"]
     if field == "due":
         value = date.fromisoformat(value) if value else None
+    elif field == "due_time":
+        value = time.fromisoformat(value) if value else None
     elif field == "priority":
-        if value not in {"low", "med", "high"}:
+        if value is not None and value not in {"low", "med", "high"}:
             raise BadCommandUsage("priority must be low, med, or high")
     elif field == "tags":
         if isinstance(value, str):
             value = [v.strip() for v in value.split(",") if v.strip()]
     return storage.update(int(args["id"]), **{field: value}).to_dict()
+
+
+def tool_note_todo(storage: Storage, args: dict[str, Any]) -> dict[str, Any]:
+    """Append a timestamped note to a todo's description without clobbering."""
+    tid = int(args["id"])
+    text = args["text"]
+    todo = storage.get(tid)
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    line = f"[{stamp}] {text}"
+    new_desc = f"{todo.description}\n\n{line}" if todo.description else line
+    return storage.update(tid, description=new_desc).to_dict()
 
 
 def tool_delete_todo(storage: Storage, args: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +120,9 @@ _TOOL_DEFINITIONS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "text": {"type": "string"},
+                "description": {"type": "string"},
                 "due": {"type": "string", "format": "date"},
+                "due_time": {"type": "string", "format": "time"},
                 "priority": {"type": "string", "enum": ["low", "med", "high"]},
                 "tags": {"type": "array", "items": {"type": "string"}},
                 "project": {"type": "string"},
@@ -140,18 +159,40 @@ _TOOL_DEFINITIONS: list[types.Tool] = [
     ),
     types.Tool(
         name="edit_todo",
-        description="Edit one field of a todo.",
+        description=(
+            "Edit one field of a todo. NOTE: editing 'description' REPLACES "
+            "the field — use note_todo if you want to append a note instead."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
                 "id": {"type": "integer"},
                 "field": {
                     "type": "string",
-                    "enum": ["text", "done", "due", "priority", "tags", "project"],
+                    "enum": [
+                        "text", "description", "done", "due", "due_time",
+                        "priority", "tags", "project", "claude_session",
+                    ],
                 },
                 "value": {},
             },
             "required": ["id", "field", "value"],
+        },
+    ),
+    types.Tool(
+        name="note_todo",
+        description=(
+            "Append a timestamped note to a todo's description. Preserves "
+            "any existing description content. Prefer this over edit_todo "
+            "for the description field when adding context across turns."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "text": {"type": "string"},
+            },
+            "required": ["id", "text"],
         },
     ),
     types.Tool(
@@ -173,6 +214,7 @@ _TOOL_DISPATCH = {
     "mark_done": tool_mark_done,
     "mark_undone": tool_mark_undone,
     "edit_todo": tool_edit_todo,
+    "note_todo": tool_note_todo,
     "delete_todo": tool_delete_todo,
 }
 
