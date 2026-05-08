@@ -5,7 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "todo-cli"
 version = "0.1.0"
-description = "Personal todo CLI with REPL and MCP server"
+description = "Personal todo CLI with full-screen TUI and MCP server"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [{name = "LegendSilvia"}]
 requires-python = ">=3.11"
 dependencies = [
     "prompt_toolkit>=3.0",
