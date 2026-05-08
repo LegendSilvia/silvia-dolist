@@ -51,7 +51,14 @@ def test_prompt_minimal_todo():
 
 def test_prompt_asks_for_full_list_context():
     p = build_prompt(_make_todo())
-    assert "list_todos" in p
+    assert "todo /list" in p
+    assert "todo /show" in p
+
+
+def test_prompt_warns_against_destructive_ops():
+    p = build_prompt(_make_todo())
+    # Claude should propose changes, not silently make them.
+    assert "destructive" in p.lower() or "propose" in p.lower()
 
 
 def test_new_session_name_starts_with_todo_id():

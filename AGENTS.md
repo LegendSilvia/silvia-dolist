@@ -126,6 +126,8 @@ Please help me think through how to approach this — break it into steps,
 surface anything I might be missing, and suggest a concrete first action.
 ```
 
-When you receive that prompt, you don't need to fetch the *target* todo — the user already has its details inline. **But the prompt explicitly asks you to call `list_todos`** to read the rest of the open list for cross-context. Do that early; mention any items that interact with the one you're working on.
+When you receive that prompt, you don't need to fetch the *target* todo — the user already has its details inline. **The prompt asks you to read the rest of the open list via the `todo` CLI** (`todo /list`, `todo /show <id>`) since you're in a terminal anyway. Do that early; mention any items that interact with the one you're working on.
 
-Subsequent `/ask` calls on the same todo resume the same session, so you'll see the conversation history. Treat each new turn as a follow-up — don't re-summarize the prior context unless the user asks. If they want you to update the todo (mark done, add notes), use `edit_todo` / `mark_done` / `mark_undone` as before.
+If the user has the `todo` MCP server registered separately, you can use those tools too — they hit the same JSON file with proper file locking, so they're safe to mix with shell calls. Use whichever fits the situation.
+
+Subsequent `/ask` calls on the same todo resume the same session, so you'll see the conversation history. Treat each new turn as a follow-up — don't re-summarize the prior context unless the user asks. If they want you to update the todo (mark done, add notes), the prompt asks you to *propose* the change, not run it — the user prefers to apply state changes themselves. Use `edit_todo` / `mark_done` / `mark_undone` only when they explicitly say "go ahead".

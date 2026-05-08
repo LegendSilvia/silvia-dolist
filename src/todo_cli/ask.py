@@ -36,12 +36,19 @@ def build_prompt(todo: Todo) -> str:
         parts.append(f"- Project: {todo.project}")
     parts.append("")
     parts.append(
-        "If the `todo` MCP server is wired in, please call `list_todos` first "
-        "to read the rest of my open list — that context often shapes good advice. "
-        "Then help me think through how to approach this todo specifically — "
-        "break it into steps, surface anything I might be missing, and suggest "
-        "a concrete first action. If progress here unblocks or affects other "
-        "items in the list, mention it."
+        "You're running in a terminal where the `todo` CLI is on PATH. Use it "
+        "to read my list before answering — that cross-context usually shapes "
+        "better advice:\n"
+        "  todo /list           open todos\n"
+        "  todo /list --all     include done items\n"
+        "  todo /show <id>      full detail for one todo\n"
+        "\n"
+        "Then help me think through this todo specifically — break it into "
+        "steps, surface anything I might be missing, and suggest a concrete "
+        "first action. If progress here unblocks or affects other items in "
+        "the list, point it out. If I want to change state on a todo (mark "
+        "done, edit, delete) I'll do it myself — just propose, don't run "
+        "destructive commands."
     )
     return "\n".join(parts)
 
