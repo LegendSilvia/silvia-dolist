@@ -52,6 +52,7 @@ ID is optional when an item is selected; the command operates on the selected ro
 | `/note [id] <text>` | Append a timestamped note to the description. Doesn't clobber prior content. |
 | `/del [id]` | Delete. |
 | `/ask [id]` | Open a new terminal with `claude`, copy a prompt about the todo to your clipboard so you can paste it in. |
+| `/mcp` | Show the MCP registration snippet and copy it to the clipboard so you can paste it into your MCP client config. |
 | `/help` | Command summary. |
 | `/clear` | Clear the output panel. |
 | `/exit`, `/quit` | Save and exit. |

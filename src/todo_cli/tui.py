@@ -21,18 +21,19 @@ from typing import Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import ANSI, FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.layout import Float, FloatContainer, HSplit, Layout, Window
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.layout.menus import CompletionsMenu
 from rich.console import Console
 
 from todo_cli import render
 from todo_cli import symbols as S
-from todo_cli.commands import CommandResult, KNOWN_COMMANDS, run_command
+from todo_cli.commands import CommandResult, run_command
 from todo_cli.config import Config
 from todo_cli.sky import SKY_HEIGHT, render_sky
 from todo_cli.storage import Storage
@@ -75,6 +76,45 @@ class _State:
 
 
 _ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask", "/note"}
+
+
+_COMMAND_HINTS: list[tuple[str, str]] = [
+    ("/add", "add a new todo (NL parsed)"),
+    ("/list", "list todos"),
+    ("/show", "detail for the selected todo"),
+    ("/done", "mark complete"),
+    ("/undo", "mark not done"),
+    ("/edit", "edit a field (or open the form)"),
+    ("/note", "append a timestamped note (no clobber)"),
+    ("/del", "delete (asks y/n)"),
+    ("/ask", "send to claude in a new terminal"),
+    ("/mcp", "show MCP registration snippet"),
+    ("/config", "view or set settings"),
+    ("/help", "command reference"),
+    ("/clear", "clear output panel"),
+    ("/exit", "save and exit"),
+    ("/quit", "save and exit"),
+]
+
+
+class _SlashCompleter(Completer):
+    """Inline completion for slash commands with one-line descriptions."""
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        # Only complete while typing the first token, and only if it starts with /
+        if " " in text.strip() or "\t" in text:
+            return
+        first = text.lstrip()
+        if not first.startswith("/"):
+            return
+        for cmd, desc in _COMMAND_HINTS:
+            if cmd.startswith(first):
+                yield Completion(
+                    cmd,
+                    start_position=-len(first),
+                    display_meta=desc,
+                )
 
 # Field name + display label for the edit form, in the order shown.
 _EDITABLE_FIELDS = [
@@ -200,7 +240,8 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     history_path.parent.mkdir(parents=True, exist_ok=True)
     input_buffer = Buffer(
-        completer=WordCompleter(KNOWN_COMMANDS, ignore_case=False),
+        completer=_SlashCompleter(),
+        complete_while_typing=True,
         history=FileHistory(str(history_path)),
         multiline=False,
     )
@@ -273,17 +314,28 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         get_line_prefix=prompt_prefix,
     )
 
+    main_split = HSplit([
+        sky_panel,
+        _divider(),
+        todo_panel,
+        _divider(),
+        output_panel,
+        _divider(),
+        hints_window,
+        input_window,
+    ])
+
     layout = Layout(
-        HSplit([
-            sky_panel,
-            _divider(),
-            todo_panel,
-            _divider(),
-            output_panel,
-            _divider(),
-            hints_window,
-            input_window,
-        ]),
+        FloatContainer(
+            content=main_split,
+            floats=[
+                Float(
+                    xcursor=True,
+                    ycursor=True,
+                    content=CompletionsMenu(max_height=8, scroll_offset=1),
+                ),
+            ],
+        ),
         focused_element=input_window,
     )
 

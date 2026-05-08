@@ -259,6 +259,30 @@ def render_help(text: str) -> RenderableType:
     return _gutter_block(header, body)
 
 
+def render_mcp_setup(snippet: str, copied: bool) -> RenderableType:
+    header = _header(S.ACTIVE, S.S_ACTIVE, "MCP setup")
+    body = Text()
+    body.append(
+        "Add this to your MCP client config and reload it.\n",
+        style=S.S_DIM,
+    )
+    body.append(
+        "  Claude Code:  ~/.claude.json   (or %USERPROFILE%\\.claude.json)\n"
+        "  Per-project:  .mcp.json in the project root\n\n",
+        style=S.S_DIM,
+    )
+    body.append(snippet, style="cyan")
+    body.append("\n")
+    if copied:
+        body.append("\nCopied to clipboard.", style="green")
+    else:
+        body.append(
+            "\nClipboard tool not available — copy the block above manually.",
+            style=S.S_WARN,
+        )
+    return _gutter_block(header, body)
+
+
 def render_config(config, fields: list[tuple[str, str]]) -> RenderableType:
     header = _header(S.ACTIVE, S.S_ACTIVE, "Config")
     table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2, 0, 0))

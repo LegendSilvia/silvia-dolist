@@ -366,3 +366,15 @@ def test_note_missing_args_errors(storage: Storage, config: Config):
     result = run_command("/note 1", storage, config)
     rendered = str(result.renderable).lower()
     assert "/note" in rendered or "text" in rendered
+
+
+def test_mcp_command_shows_snippet(storage: Storage, config: Config):
+    result = run_command("/mcp", storage, config)
+    rendered = _render(result.renderable)
+    assert "mcpServers" in rendered
+    assert "todo-mcp" in rendered
+
+
+def test_mcp_in_known_commands():
+    from todo_cli.commands import KNOWN_COMMANDS
+    assert "/mcp" in KNOWN_COMMANDS

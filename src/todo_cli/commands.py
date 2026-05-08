@@ -37,8 +37,15 @@ def command(name: str) -> Callable[[Handler], Handler]:
 
 KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
-    "/note", "/ask", "/config", "/help", "/clear", "/exit", "/quit",
+    "/note", "/ask", "/mcp", "/config", "/help", "/clear", "/exit", "/quit",
 ]
+
+
+MCP_SNIPPET = '''{
+  "mcpServers": {
+    "todo": { "command": "todo-mcp" }
+  }
+}'''
 
 
 _KNOWN_SLASH_NAMES = {c.lstrip("/") for c in KNOWN_COMMANDS}
@@ -149,6 +156,7 @@ HELP_TEXT = """\
 /del [id]            delete
 /ask [id]            open new terminal with claude + copy a prompt
                      about the todo (uses text, description, due, etc.)
+/mcp                 show MCP registration snippet, copy to clipboard
 /config              show settings
 /config <key> <val>  set a setting (e.g. agent_terminal_cwd ~/work)
 /help                this list
@@ -383,6 +391,13 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
         bits.append("could not launch new terminal — paste from clipboard manually")
     msg = f"/ask #{tid}: " + "; ".join(bits)
     return CommandResult(renderable=render.render_info(msg))
+
+
+@command("/mcp")
+def _handle_mcp(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    """Show the MCP registration snippet and copy it to the clipboard."""
+    copied = ask_mod.copy_to_clipboard(MCP_SNIPPET)
+    return CommandResult(renderable=render.render_mcp_setup(MCP_SNIPPET, copied))
 
 
 @command("/config")
