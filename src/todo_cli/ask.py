@@ -104,6 +104,7 @@ def open_terminal_with_claude(
     *,
     session_name: Optional[str] = None,
     resume_session: Optional[str] = None,
+    cwd: Optional[str] = None,
 ) -> bool:
     """Spawn a new terminal window running `claude`.
 
@@ -112,6 +113,7 @@ def open_terminal_with_claude(
     - ``session_name`` names a fresh session via ``claude -n``.
     - ``resume_session`` resumes an existing named session via
       ``claude --resume`` and ignores the prompt.
+    - ``cwd`` is the working directory the new terminal opens in.
     """
     args = _build_claude_args(prompt, session_name, resume_session)
     try:
@@ -124,18 +126,20 @@ def open_terminal_with_claude(
                 [claude_path] + args[1:],
                 creationflags=new_console,
                 shell=False,
+                cwd=cwd,
             )
             return True
         if sys.platform == "darwin":
             quoted = " ".join(_shell_quote(a) for a in args)
+            cd_prefix = f"cd {_shell_quote(cwd)} && " if cwd else ""
             subprocess.Popen([
                 "osascript", "-e",
-                f'tell application "Terminal" to do script "{quoted}"',
+                f'tell application "Terminal" to do script "{cd_prefix}{quoted}"',
             ])
             return True
         for term in ("x-terminal-emulator", "gnome-terminal", "konsole", "xterm"):
             if shutil.which(term):
-                subprocess.Popen([term, "-e"] + args)
+                subprocess.Popen([term, "-e"] + args, cwd=cwd)
                 return True
         return False
     except (subprocess.SubprocessError, FileNotFoundError, OSError):

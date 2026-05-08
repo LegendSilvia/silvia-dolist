@@ -259,6 +259,24 @@ def render_help(text: str) -> RenderableType:
     return _gutter_block(header, body)
 
 
+def render_config(config, fields: list[tuple[str, str]]) -> RenderableType:
+    header = _header(S.ACTIVE, S.S_ACTIVE, "Config")
+    table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2, 0, 0))
+    table.add_column(no_wrap=True)
+    table.add_column(no_wrap=True)
+    table.add_column(overflow="fold")
+    for field_name, description in fields:
+        value = getattr(config, field_name, None)
+        value_str = "(unset)" if value is None else str(value)
+        value_style = S.S_DIM if value is None else ""
+        table.add_row(
+            Text(field_name, style=S.S_ID),
+            Text(value_str, style=value_style),
+            Text(description, style=S.S_DIM),
+        )
+    return _gutter_block(header, table)
+
+
 def _value_repr(value):
     """How to display a Todo field value in the edit form."""
     if value is None:

@@ -103,6 +103,17 @@ The list color-codes the due indicator by how close the deadline is:
 
 **Resumable sessions.** First `/ask` on a todo names a Claude session like `todo-17-abc12345` and stores the name on the todo. Subsequent `/ask` calls resume that same session via `claude --resume <name>`, so the conversation picks up where it left off — useful when a todo isn't solved in one day. The session name shows up in `/show` detail and in the edit form (you can clear it with `/edit claude_session none` to start fresh next time).
 
+**Working directory.** By default, the new terminal opens in todo-cli's own working directory. Set `agent_terminal_cwd` to make it open somewhere else (your project root, your scratch dir, etc.):
+
+```
+/config agent_terminal_cwd C:\Users\me\projects\foo
+/config agent_terminal_cwd ~/work        # ~ expands
+/config agent_terminal_cwd none          # clear
+/config                                  # show all settings
+```
+
+Settings persist in `~/.todo/config.json`.
+
 **Detail view.** Pressing Enter on a selected todo opens its detail in the output panel — title, description, due, priority, tags, project, timestamps. Esc closes it. ↑/↓ also closes it (you've moved on). The detail re-renders live so changes from the MCP server show up.
 
 **Two-step flow.** `/ask` is gated behind a detail view so you confirm what's about to be sent off:

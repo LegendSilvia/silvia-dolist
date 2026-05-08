@@ -1,11 +1,12 @@
 from __future__ import annotations
 import argparse
+import os
 import shlex
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from typing import Any, Callable
 
-from todo_cli.config import Config
+from todo_cli.config import Config, SETTABLE_FIELDS
 from todo_cli.errors import BadCommandUsage, TodoError
 from todo_cli.models import Todo
 from todo_cli.parse_text import parse_input
@@ -35,8 +36,28 @@ def command(name: str) -> Callable[[Handler], Handler]:
 
 KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
-    "/ask", "/help", "/clear", "/exit", "/quit",
+    "/ask", "/config", "/help", "/clear", "/exit", "/quit",
 ]
+
+
+def _tokenize(line: str) -> list[str]:
+    """Split a command line into tokens.
+
+    On Windows, use non-POSIX mode so backslashes in paths are preserved
+    (otherwise `C:\\Users\\me` becomes `C:Usersme`). Non-POSIX mode keeps
+    surrounding quotes in tokens, so strip them after the fact for parity
+    with POSIX behavior on the rest of the surface.
+    """
+    if os.name == "nt":
+        tokens = shlex.split(line, posix=False)
+        return [_strip_quotes(t) for t in tokens]
+    return shlex.split(line)
+
+
+def _strip_quotes(token: str) -> str:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in ('"', "'"):
+        return token[1:-1]
+    return token
 
 
 def run_command(line: str, storage: Storage, config: Config) -> CommandResult:
@@ -44,7 +65,7 @@ def run_command(line: str, storage: Storage, config: Config) -> CommandResult:
     if not line:
         return CommandResult()
     try:
-        tokens = shlex.split(line)
+        tokens = _tokenize(line)
     except ValueError as e:
         return CommandResult(renderable=render.render_error(f"Parse error: {e}"))
     head = tokens[0]
@@ -97,6 +118,8 @@ HELP_TEXT = """\
 /del [id]            delete
 /ask [id]            open new terminal with claude + copy a prompt
                      about the todo (uses text, description, due, etc.)
+/config              show settings
+/config <key> <val>  set a setting (e.g. agent_terminal_cwd ~/work)
 /help                this list
 /clear               clear screen
 /exit, /quit         save and exit
@@ -285,10 +308,12 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
     todo = storage.get(tid)
     prompt = ask_mod.build_prompt(todo)
     copied = ask_mod.copy_to_clipboard(prompt)
+    cwd = config.agent_terminal_cwd
 
     if todo.claude_session:
         opened = ask_mod.open_terminal_with_claude(
             resume_session=todo.claude_session,
+            cwd=cwd,
         )
         action = f"resumed session {todo.claude_session}"
     else:
@@ -296,6 +321,7 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
         opened = ask_mod.open_terminal_with_claude(
             prompt=prompt,
             session_name=session_name,
+            cwd=cwd,
         )
         if opened:
             storage.update(tid, claude_session=session_name)
@@ -308,3 +334,31 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
         bits.append("could not launch new terminal — paste from clipboard manually")
     msg = f"/ask #{tid}: " + "; ".join(bits)
     return CommandResult(renderable=render.render_info(msg))
+
+
+@command("/config")
+def _handle_config(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    if not args:
+        return CommandResult(renderable=render.render_config(config, SETTABLE_FIELDS))
+    if len(args) < 2:
+        raise BadCommandUsage("/config <key> <value>  (or just /config to view)")
+    key = args[0]
+    raw_value = " ".join(args[1:])
+    valid_keys = {k for k, _ in SETTABLE_FIELDS}
+    if key not in valid_keys:
+        raise BadCommandUsage(
+            f"unknown config key: {key} (valid: {', '.join(sorted(valid_keys))})"
+        )
+    value: Any
+    if raw_value.lower() in {"none", "null", "clear"}:
+        value = None
+    elif key == "agent_terminal_cwd":
+        from pathlib import Path as _Path
+        expanded = _Path(raw_value).expanduser()
+        if not expanded.is_dir():
+            raise BadCommandUsage(f"not a directory: {expanded}")
+        value = str(expanded.resolve())
+    else:
+        value = raw_value
+    setattr(config, key, value)
+    return CommandResult(renderable=render.render_info(f"set {key} = {value}"))
