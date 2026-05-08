@@ -9,6 +9,7 @@ from typing import Any, Optional
 # (field_name, description). Unknown keys are filtered out on load.
 SETTABLE_FIELDS: list[tuple[str, str]] = [
     ("agent_terminal_cwd", "working directory for /ask terminal (path or 'none')"),
+    ("done_retention_days", "default age for /purge (integer days, or 'none' to require explicit arg)"),
 ]
 
 
@@ -17,6 +18,7 @@ class Config:
     """User settings. Forward-compatible: unknown JSON keys are dropped on load."""
 
     agent_terminal_cwd: Optional[str] = None
+    done_retention_days: Optional[int] = None
 
     @classmethod
     def load(cls, path: Path) -> "Config":

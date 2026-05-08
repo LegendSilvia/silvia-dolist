@@ -87,6 +87,7 @@ _COMMAND_HINTS: list[tuple[str, str]] = [
     ("/edit", "edit a field (or open the form)"),
     ("/note", "append a timestamped note (no clobber)"),
     ("/del", "delete (asks y/n)"),
+    ("/purge", "delete done todos older than N days"),
     ("/ask", "send to claude in a new terminal"),
     ("/mcp", "show MCP registration snippet"),
     ("/config", "view or set settings"),

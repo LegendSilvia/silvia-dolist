@@ -4,7 +4,7 @@ import os
 import re
 import shlex
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any, Callable
 
 from todo_cli.config import Config, SETTABLE_FIELDS
@@ -37,7 +37,7 @@ def command(name: str) -> Callable[[Handler], Handler]:
 
 KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
-    "/note", "/ask", "/mcp", "/config", "/help", "/clear", "/exit", "/quit",
+    "/note", "/ask", "/mcp", "/purge", "/config", "/help", "/clear", "/exit", "/quit",
 ]
 
 
@@ -153,7 +153,8 @@ HELP_TEXT = """\
 /edit [id] <field> <value>     fields: text, description, due, due_time,
                                 priority, tags, project, done
 /note [id] <text>    append a timestamped note to description (won't clobber)
-/del [id]            delete
+/del [id]            delete one (asks y/n)
+/purge [days]        delete done todos older than N days (uses config default if omitted)
 /ask [id]            open new terminal with claude + copy a prompt
                      about the todo (uses text, description, due, etc.)
 /mcp                 show MCP registration snippet, copy to clipboard
@@ -393,6 +394,39 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
     return CommandResult(renderable=render.render_info(msg))
 
 
+@command("/purge")
+def _handle_purge(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    """Delete done todos older than N days. N defaults to config.done_retention_days."""
+    if args:
+        try:
+            days = int(args[0])
+        except ValueError as e:
+            raise BadCommandUsage(
+                "/purge [days] — days must be an integer"
+            ) from e
+    elif config.done_retention_days is not None:
+        days = config.done_retention_days
+    else:
+        raise BadCommandUsage(
+            "/purge [days] — pass days, or set with /config done_retention_days <N>"
+        )
+    if days < 0:
+        raise BadCommandUsage("days must be >= 0")
+    cutoff = datetime.now() - timedelta(days=days)
+    purged_ids: list[int] = []
+    for t in storage.list(done=True):
+        if t.completed_at is not None and t.completed_at < cutoff:
+            storage.delete(t.id)
+            purged_ids.append(t.id)
+    if not purged_ids:
+        msg = f"Nothing to purge (no done todos older than {days} days)"
+    else:
+        msg = f"Purged {len(purged_ids)} done todo(s) older than {days} days: " + ", ".join(
+            f"#{i}" for i in purged_ids
+        )
+    return CommandResult(renderable=render.render_info(msg))
+
+
 @command("/mcp")
 def _handle_mcp(args: list[str], storage: Storage, config: Config) -> CommandResult:
     """Show the MCP registration snippet and copy it to the clipboard."""
@@ -422,6 +456,13 @@ def _handle_config(args: list[str], storage: Storage, config: Config) -> Command
         if not expanded.is_dir():
             raise BadCommandUsage(f"not a directory: {expanded}")
         value = str(expanded.resolve())
+    elif key == "done_retention_days":
+        try:
+            value = int(raw_value)
+        except ValueError as e:
+            raise BadCommandUsage(f"{key} must be an integer (days)") from e
+        if value < 0:
+            raise BadCommandUsage(f"{key} must be >= 0")
     else:
         value = raw_value
     setattr(config, key, value)

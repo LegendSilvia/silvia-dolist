@@ -50,7 +50,8 @@ ID is optional when an item is selected; the command operates on the selected ro
 | `/undo [id]` | Mark not done. |
 | `/edit [id] <field> <value>` | Update one field. See fields below. Replaces. |
 | `/note [id] <text>` | Append a timestamped note to the description. Doesn't clobber prior content. |
-| `/del [id]` | Delete. |
+| `/del [id]` | Delete one (asks y/n). |
+| `/purge [days]` | Delete done todos older than N days. Defaults to `done_retention_days` from config when omitted. |
 | `/ask [id]` | Open a new terminal with `claude`, copy a prompt about the todo to your clipboard so you can paste it in. |
 | `/mcp` | Show how to register the MCP server with Claude Code (`claude mcp add todo todo-mcp` one-liner, plus the JSON snippet for manual config edits) and copy the JSON to your clipboard. |
 | `/help` | Command summary. |
@@ -115,6 +116,20 @@ The list color-codes the due indicator by how close the deadline is:
 ```
 
 Settings persist in `~/.todo/config.json`.
+
+## Done todos and cleanup
+
+`/done` doesn't delete — it sets `done: true` and stamps `completed_at`. Done todos stay in storage so you can look back at what you've finished. They're hidden from `/list` by default; use `/list --done` to see them or `/list --all` for everything.
+
+When you want to clean up old completed work:
+
+```
+/purge 30                                # delete done todos older than 30 days
+/purge                                   # uses done_retention_days from config
+/config done_retention_days 30           # set the default
+```
+
+Only done todos older than the cutoff are removed; open todos and recently-done todos are untouched. Run it whenever you want — there's no auto-purge.
 
 **Detail view.** Pressing Enter on a selected todo opens its detail in the output panel — title, description, due, priority, tags, project, timestamps. Esc closes it. ↑/↓ also closes it (you've moved on). The detail re-renders live so changes from the MCP server show up.
 
