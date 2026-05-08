@@ -16,12 +16,14 @@ from rich.text import Text
 SKY_HEIGHT = 4
 
 _STAR_CHARS = (".", "·", "*", "+", "'", ",", "✦", "✧")
-_CLOUD_CHUNKS = ("▓▓▓", "▓▓▓▓", "▓▓", "▓▓▓▓▓")
-_SKY_FILL = "▒"  # square of dots — the "many-dot square" texture
-
-# Subdued sky tones so the texture reads as atmosphere, not a solid bar.
-_FG_DAY = "rgb(150,180,210)"
-_FG_NIGHT = "rgb(50,70,120)"
+# Clouds use a gradient of dot density — light edges, dense center.
+_CLOUD_CHUNKS = (
+    "░▒░",
+    "░▒▓▒░",
+    "░▓▓░",
+    "░▒▓▓▒░",
+    "░▒▓▒▒░",
+)
 
 
 def _arc_position(t: float, width: int, sky_h: int) -> tuple[int, int]:
@@ -58,10 +60,10 @@ def _scatter_stars(
     for _ in range(n):
         r = rng.randrange(rows)
         c = rng.randrange(cols)
-        if grid[r][c][0] != _SKY_FILL:
+        if grid[r][c][0] != " ":
             continue
         ch = rng.choice(_STAR_CHARS)
-        style = "bold rgb(255,245,200)" if ch in ("✦", "✧", "*") else "rgb(220,220,200)"
+        style = "bold rgb(255,245,200)" if ch in ("✦", "✧", "*") else "rgb(180,180,150)"
         grid[r][c] = (ch, style)
 
 
@@ -83,10 +85,11 @@ def _scatter_clouds(
         chunk = rng.choice(_CLOUD_CHUNKS)
         r = rng.choice([0, 0, 1, 1, 2])
         c = rng.randrange(0, max(1, cols - len(chunk)))
-        if any(grid[r][c + i][0] != _SKY_FILL for i in range(len(chunk))):
+        if any(grid[r][c + i][0] != " " for i in range(len(chunk))):
             continue
         for i, ch in enumerate(chunk):
-            grid[r][c + i] = (ch, "rgb(245,245,250)")
+            # Subtle gradient: pure ▓ blocks read brighter than ░ edges.
+            grid[r][c + i] = (ch, "rgb(230,230,235)")
         placed += len(chunk)
 
 
@@ -118,16 +121,15 @@ def render_sky(now: Optional[datetime] = None, width: int = 80) -> Text:
     hour = now.hour + now.minute / 60.0
     is_night = hour < 6.0 or hour >= 18.0
 
-    fill_style = _FG_NIGHT if is_night else _FG_DAY
     grid: list[list[tuple[str, str]]] = [
-        [(_SKY_FILL, fill_style) for _ in range(width)] for _ in range(SKY_HEIGHT)
+        [(" ", "")] * width for _ in range(SKY_HEIGHT)
     ]
 
     seed = now.year * 10000 + now.month * 100 + now.day
     if is_night:
-        _scatter_stars(grid, seed, density=0.12)
+        _scatter_stars(grid, seed, density=0.10)
     else:
-        _scatter_clouds(grid, seed, coverage=0.25)
+        _scatter_clouds(grid, seed, coverage=0.20)
 
     sun = _sun_position(hour, width, SKY_HEIGHT)
     if sun is not None:
