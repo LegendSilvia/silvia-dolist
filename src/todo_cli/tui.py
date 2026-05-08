@@ -59,10 +59,10 @@ class _State:
     def __init__(self) -> None:
         self.last_result: Optional[CommandResult] = None
         self.selected_index: int = 0
-        # Tracks which todo's detail panel has been opened most recently.
-        # /ask requires viewing the detail first, so the user has a moment
-        # to confirm what's about to be handed off to Claude.
-        self.last_viewed_id: Optional[int] = None
+        # Detail view is a modal mode (like the edit form / delete confirm).
+        # When set, the output panel renders the detail freshly each tick;
+        # esc closes it, enter again triggers /ask, ↑↓ or typing dismisses.
+        self.viewing_detail_id: Optional[int] = None
         # Edit-form modal state. None = not in edit mode.
         self.edit_panel_id: Optional[int] = None
         self.edit_field_index: int = 0
@@ -174,6 +174,12 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
                 )
             except Exception:
                 state.edit_panel_id = None
+        if state.viewing_detail_id is not None:
+            try:
+                target = storage.get(state.viewing_detail_id)
+                return _to_ansi(render.render_todo_detail(target), _term_width())
+            except Exception:
+                state.viewing_detail_id = None
         if state.last_result is None or state.last_result.renderable is None:
             return ANSI("")
         return _to_ansi(state.last_result.renderable, _term_width())
@@ -201,6 +207,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         # is intentionally preserved so the form can re-open after a save.
         state.awaiting_delete_id = None
         state.edit_panel_id = None
+        state.viewing_detail_id = None
 
     input_buffer.on_text_changed += _on_input_changed
 
@@ -239,6 +246,11 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return FormattedText([
                 ("ansicyan",
                  "  ↑↓ pick field  ·  enter to edit value  ·  esc cancel"),
+            ])
+        if state.viewing_detail_id is not None:
+            return FormattedText([
+                ("ansicyan",
+                 "  enter again = /ask claude  ·  esc close  ·  ↑↓ moves selection"),
             ])
         return FormattedText([
             ("ansibrightblack",
@@ -320,12 +332,12 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             if sel is None:
                 return
             # Enter twice on the same selection: detail → /ask.
-            if state.last_viewed_id == sel.id:
-                state.last_viewed_id = None
+            if state.viewing_detail_id == sel.id:
+                state.viewing_detail_id = None
                 state.last_result = run_command(f"/ask {sel.id}", storage, config)
             else:
-                state.last_viewed_id = sel.id
-                state.last_result = run_command(f"/show {sel.id}", storage, config)
+                state.viewing_detail_id = sel.id
+                state.last_result = None
             return
 
         sel = _selected_todo()
@@ -359,7 +371,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
                     return
                 state.edit_panel_id = target_id
                 state.edit_field_index = 0
-                state.last_viewed_id = None
+                state.viewing_detail_id = None
                 input_buffer.reset()
                 return
 
@@ -387,7 +399,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         # /ask still requires a prior view (typed-command path).
         if line.startswith("/ask"):
             target_id = _extract_command_id(line)
-            if target_id is None or state.last_viewed_id != target_id:
+            if target_id is None or state.viewing_detail_id != target_id:
                 input_buffer.reset()
                 state.last_result = CommandResult(
                     renderable=render.render_warn(
@@ -396,18 +408,29 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
                 )
                 return
 
+        # Typed /show enters detail mode directly (skip the run_command
+        # path so the panel stays live, refreshes from state, and esc
+        # closes it like any modal).
+        if line.startswith("/show"):
+            shown_id = _extract_command_id(line)
+            if shown_id is not None:
+                try:
+                    storage.get(shown_id)
+                    state.viewing_detail_id = shown_id
+                    state.last_result = None
+                    input_buffer.reset()
+                    return
+                except Exception:
+                    pass
+
         input_buffer.reset()
         result = run_command(line, storage, config)
         if result.clear:
             state.last_result = None
         else:
             state.last_result = result
-        if line.startswith("/show"):
-            shown_id = _extract_command_id(line)
-            if shown_id is not None:
-                state.last_viewed_id = shown_id
-        else:
-            state.last_viewed_id = None
+        # Any non-/show command invalidates the detail view.
+        state.viewing_detail_id = None
 
         # If this was a /edit save and we have a pending resume marker,
         # re-open the edit form so the user can keep editing fields.
@@ -431,7 +454,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             state.edit_field_index = max(0, state.edit_field_index - 1)
             return
         state.selected_index = max(0, state.selected_index - 1)
-        state.last_viewed_id = None  # selection moved → /ask must re-view
+        state.viewing_detail_id = None  # selection moved → /ask must re-view
 
     @kb.add("down", filter=empty_input)
     def _down(event):
@@ -444,7 +467,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return
         todos = _visible_todos()
         state.selected_index = min(max(0, len(todos) - 1), state.selected_index + 1)
-        state.last_viewed_id = None
+        state.viewing_detail_id = None
 
     @kb.add("space", filter=empty_input)
     def _toggle_done(event):
@@ -465,6 +488,9 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         if state.edit_panel_id is not None:
             state.edit_panel_id = None
             cancelled = True
+        if state.viewing_detail_id is not None:
+            state.viewing_detail_id = None
+            cancelled = True
         if state.resume_edit_for_id is not None:
             state.resume_edit_for_id = None
         if cancelled:
@@ -483,7 +509,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             )
         except Exception:
             pass
-        state.last_viewed_id = None
+        state.viewing_detail_id = None
 
     @kb.add("n", filter=empty_input & awaiting_delete)
     def _cancel_delete(event):

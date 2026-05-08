@@ -101,6 +101,8 @@ The list color-codes the due indicator by how close the deadline is:
 
 `/ask` takes a todo, builds a prompt that includes the title, description, due, priority, tags, and project, copies it to your clipboard, and opens a new terminal running `claude`. Paste with `Ctrl-V` and you're talking to Claude with the full context.
 
+**Detail view.** Pressing Enter on a selected todo opens its detail in the output panel — title, description, due, priority, tags, project, timestamps. Esc closes it. ↑/↓ also closes it (you've moved on). The detail re-renders live so changes from the MCP server show up.
+
 **Two-step flow.** `/ask` is gated behind a detail view so you confirm what's about to be sent off:
 
 1. Select the todo with ↑/↓.
