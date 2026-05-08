@@ -65,7 +65,7 @@ def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -
     matches = suggest(tokens[0], KNOWN_COMMANDS)
     if matches:
         return CommandResult(
-            renderable=render.render_info(
+            renderable=render.render_warn(
                 f"Did you mean: {matches[0]}? (use /add {tokens[0]} to add as a todo)"
             )
         )
@@ -81,34 +81,32 @@ def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -
         project=parsed.project,
     )
     storage.add(todo)
-    return CommandResult(renderable=render.render_info(_added_summary(todo)))
+    return CommandResult(renderable=render.render_added(todo))
 
 
 HELP_TEXT = """\
-Commands:
-  /add <text> [--due YYYY-MM-DD] [--priority low|med|high] [--tags a,b] [--project p]
-  /list [--all] [--done] [--tag X] [--project P] [--overdue] [--today]
-  /show <id>
-  /done <id>      mark complete
-  /undo <id>      mark incomplete
-  /edit <id> <field> <value>
-  /del <id>       delete
-  /help           this list
-  /clear          clear screen
-  /exit, /quit    save and exit
+/add <text>          add (text is parsed for date/priority/#tags/@project)
+/list [--all|--done|--tag X|--project P|--overdue|--today]
+/show <id>           details
+/done <id>           mark complete
+/undo <id>           mark incomplete
+/edit <id> <field> <value>
+/del <id>            delete
+/help                this list
+/clear               clear screen
+/exit, /quit         save and exit
 
-Natural language: free-form text (or text inside /add) is parsed for date,
-priority, #tags, and @project. Examples:
-  finish report by friday #work @q2
-  buy milk tomorrow
-  call dentist next monday p1
-Explicit --flags always win over the parsed values.
+natural language is parsed before flags. examples:
+  finish report by friday #work @q2 p1
+  buy milk tmr
+  call dentist next monday
+explicit --flags always win.
 """
 
 
 @command("/help")
 def _handle_help(args: list[str], storage: Storage, config: Config) -> CommandResult:
-    return CommandResult(renderable=render.render_info(HELP_TEXT))
+    return CommandResult(renderable=render.render_help(HELP_TEXT))
 
 
 @command("/clear")
@@ -163,23 +161,7 @@ def _handle_add(args: list[str], storage: Storage, config: Config) -> CommandRes
         project=ns.project if ns.project is not None else parsed.project,
     )
     storage.add(todo)
-    return CommandResult(renderable=render.render_info(_added_summary(todo)))
-
-
-def _added_summary(todo: Todo) -> str:
-    bits = [f"Added #{todo.id}: {todo.text}"]
-    extras = []
-    if todo.due:
-        extras.append(f"due {todo.due.isoformat()}")
-    if todo.priority:
-        extras.append(f"{todo.priority} priority")
-    if todo.tags:
-        extras.append("tags " + ", ".join(todo.tags))
-    if todo.project:
-        extras.append(f"project {todo.project}")
-    if extras:
-        bits.append("  (" + "; ".join(extras) + ")")
-    return "\n".join(bits)
+    return CommandResult(renderable=render.render_added(todo))
 
 
 def _list_parser() -> argparse.ArgumentParser:
@@ -200,10 +182,13 @@ def _handle_list(args: list[str], storage: Storage, config: Config) -> CommandRe
     ns = _parse_or_raise(_list_parser(), args)
     if ns.all:
         done_filter: bool | None = None
+        label = "total"
     elif ns.done:
         done_filter = True
+        label = "done"
     else:
         done_filter = False
+        label = "open"
     todos = storage.list(
         done=done_filter,
         tag=ns.tag,
@@ -211,7 +196,7 @@ def _handle_list(args: list[str], storage: Storage, config: Config) -> CommandRe
         overdue=ns.overdue,
         today=ns.today,
     )
-    return CommandResult(renderable=render.render_todo_list(todos))
+    return CommandResult(renderable=render.render_todo_list(todos, label=label))
 
 
 def _parse_id(args: list[str], cmd: str) -> int:

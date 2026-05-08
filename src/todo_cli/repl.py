@@ -3,17 +3,27 @@ from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
 
+from todo_cli import symbols as S
 from todo_cli.commands import CommandResult, KNOWN_COMMANDS, run_command
 from todo_cli.config import Config
 from todo_cli.storage import Storage
 
 
-def _make_prompt(storage: Storage) -> str:
+def _make_prompt(storage: Storage) -> FormattedText:
     open_count = len(storage.list(done=False))
-    return f"todo ({open_count} open) > "
+    return FormattedText([
+        ("ansicyan bold", S.ACTIVE + " "),
+        ("ansidim", f"todo ({open_count} open) "),
+        ("ansicyan", "› "),
+    ])
+
+
+def _banner() -> str:
+    return f"\n[bold cyan]{S.ACTIVE}[/bold cyan]  [bold]todo[/bold]   [dim]{S.DOT}  /help for commands  {S.DOT}  type freely (e.g. \"buy milk tmr\")[/dim]\n"
 
 
 def _process_line(line: str, storage: Storage, config: Config) -> CommandResult:
@@ -28,6 +38,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         history=FileHistory(str(history_path)),
         completer=completer,
     )
+    console.print(_banner())
     while True:
         try:
             line = session.prompt(_make_prompt(storage))

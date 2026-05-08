@@ -53,7 +53,7 @@ def test_unknown_command_suggests(storage: Storage, config: Config):
 def test_help_returns_renderable(storage: Storage, config: Config):
     result = run_command("/help", storage, config)
     assert result.renderable is not None
-    assert "Commands:" in str(result.renderable)
+    assert "Commands" in _render(result.renderable)
 
 
 def test_clear_signals_clear(storage: Storage, config: Config):
@@ -68,7 +68,7 @@ def test_exit_and_quit_signal_exit(storage: Storage, config: Config):
 
 def test_add_basic(storage: Storage, config: Config):
     result = run_command("/add buy milk", storage, config)
-    assert "Added" in str(result.renderable)
+    assert "Added" in _render(result.renderable)
     todos = storage.list()
     assert len(todos) == 1
     assert todos[0].text == "buy milk"
@@ -108,7 +108,7 @@ def test_list_default_shows_open_only(storage: Storage, config: Config):
     rendered = _render(result.renderable)
     # default = open only; "a" is done, "b" is open
     assert "b" in rendered
-    assert "Todos (1)" in rendered
+    assert "1 open" in rendered
 
 
 def test_list_all(storage: Storage, config: Config):
@@ -116,14 +116,14 @@ def test_list_all(storage: Storage, config: Config):
     run_command("/add b", storage, config)
     storage.update(storage.list()[0].id, done=True)
     result = run_command("/list --all", storage, config)
-    assert "Todos (2)" in _render(result.renderable)
+    assert "2 total" in _render(result.renderable)
 
 
 def test_list_done_only(storage: Storage, config: Config):
     run_command("/add a", storage, config)
     storage.update(storage.list()[0].id, done=True)
     result = run_command("/list --done", storage, config)
-    assert "Todos (1)" in _render(result.renderable)
+    assert "1 done" in _render(result.renderable)
 
 
 def test_list_filter_tag(storage: Storage, config: Config):
@@ -220,7 +220,7 @@ def test_del_missing_returns_error(storage: Storage, config: Config):
 
 def test_free_form_auto_adds(storage: Storage, config: Config):
     result = run_command("buy milk", storage, config)
-    assert "Added" in str(result.renderable)
+    assert "Added" in _render(result.renderable)
     todos = storage.list()
     assert todos[0].text == "buy milk"
 
@@ -235,7 +235,7 @@ def test_free_form_typo_suggests_command(storage: Storage, config: Config):
 
 def test_free_form_with_dashes_does_not_break_argparse(storage: Storage, config: Config):
     result = run_command("buy --milk and bread", storage, config)
-    assert "Added" in str(result.renderable)
+    assert "Added" in _render(result.renderable)
     todo = storage.list()[0]
     assert todo.text == "buy --milk and bread"
 
@@ -294,6 +294,6 @@ def test_add_explicit_tags_override_nl_tags(storage: Storage, config: Config):
 
 def test_added_summary_shows_extracted_fields(storage: Storage, config: Config):
     result = run_command("review pr #code @backend tomorrow", storage, config)
-    rendered = str(result.renderable)
+    rendered = _render(result.renderable)
     assert "code" in rendered
     assert "backend" in rendered
