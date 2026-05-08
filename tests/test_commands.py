@@ -297,3 +297,14 @@ def test_added_summary_shows_extracted_fields(storage: Storage, config: Config):
     rendered = _render(result.renderable)
     assert "code" in rendered
     assert "backend" in rendered
+
+
+def test_render_list_marks_selected_row(storage: Storage, config: Config):
+    from todo_cli.render import render_todo_list
+    run_command("/add first", storage, config)
+    run_command("/add second", storage, config)
+    todos = storage.list()
+    sel_id = todos[0].id
+    rendered = _render(render_todo_list(todos, selected_id=sel_id))
+    # cursor glyph appears next to the selected row
+    assert "›" in rendered

@@ -126,7 +126,12 @@ def render_warn(message: str) -> Text:
     return _header(S.WARN, S.S_WARN, message)
 
 
-def render_todo_list(todos: list[Todo], *, label: str = "open") -> RenderableType:
+def render_todo_list(
+    todos: list[Todo],
+    *,
+    label: str = "open",
+    selected_id: int | None = None,
+) -> RenderableType:
     count = len(todos)
     header = _header(
         S.ACTIVE, S.S_ACTIVE,
@@ -137,6 +142,7 @@ def render_todo_list(todos: list[Todo], *, label: str = "open") -> RenderableTyp
         return _gutter_block(header, Text("No todos.", style=S.S_DIM))
 
     table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2, 0, 0))
+    table.add_column(no_wrap=True)  # cursor marker
     table.add_column(no_wrap=True)  # done glyph
     table.add_column(justify="right", no_wrap=True)  # id
     table.add_column(no_wrap=True)  # priority
@@ -144,7 +150,11 @@ def render_todo_list(todos: list[Todo], *, label: str = "open") -> RenderableTyp
     table.add_column(overflow="fold")  # text + meta
 
     for t in sorted(todos, key=_sort_key):
-        glyph = Text(S.SUBMIT, style=S.S_SUBMIT) if t.done else Text(S.RADIO_OFF, style=S.S_DIM)
+        is_selected = selected_id is not None and t.id == selected_id
+        cursor = Text("›" if is_selected else " ", style=S.S_ACTIVE if is_selected else "")
+        row_style = "reverse" if is_selected else ""
+        glyph_style = S.S_SUBMIT if t.done else S.S_DIM
+        glyph = Text(S.SUBMIT if t.done else S.RADIO_OFF, style=glyph_style)
         id_text = Text(f"#{t.id}", style=S.S_ID)
         text_cell = Text(t.text, style=S.S_DIM if t.done else "")
         meta = []
@@ -156,11 +166,13 @@ def render_todo_list(todos: list[Todo], *, label: str = "open") -> RenderableTyp
             text_cell.append("  ")
             text_cell.append(f"  {S.DOT}  ".join(meta), style=S.S_DIM)
         table.add_row(
+            cursor,
             glyph,
             id_text,
             _priority_label(t.priority),
             Text(_format_due(t.due), style=S.S_DIM),
             text_cell,
+            style=row_style,
         )
     return _gutter_block(header, table)
 

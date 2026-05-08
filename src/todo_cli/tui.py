@@ -22,6 +22,7 @@ from typing import Optional
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import ANSI, FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -57,6 +58,7 @@ def _to_ansi(renderable, width: int) -> ANSI:
 class _State:
     def __init__(self) -> None:
         self.last_result: Optional[CommandResult] = None
+        self.selected_index: int = 0
 
 
 def run(storage: Storage, config: Config, history_path: Path) -> None:
@@ -66,10 +68,31 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         width = _term_width()
         return _to_ansi(render_sky(datetime.now(), width=width), width)
 
+    def _visible_todos():
+        # Same sort order as render_todo_list so cursor index lines up.
+        from todo_cli.render import _sort_key  # local import: private helper
+        return sorted(storage.list(done=False), key=_sort_key)
+
+    def _clamp_selection(todos):
+        if not todos:
+            state.selected_index = 0
+        else:
+            state.selected_index = max(0, min(state.selected_index, len(todos) - 1))
+
+    def _selected_todo():
+        todos = _visible_todos()
+        _clamp_selection(todos)
+        return todos[state.selected_index] if todos else None
+
     def todos_text():
         width = _term_width()
-        todos = storage.list(done=False)
-        return _to_ansi(render.render_todo_list(todos, label="open"), width)
+        todos = _visible_todos()
+        _clamp_selection(todos)
+        sel = todos[state.selected_index].id if todos else None
+        return _to_ansi(
+            render.render_todo_list(todos, label="open", selected_id=sel),
+            width,
+        )
 
     def output_text():
         if state.last_result is None or state.last_result.renderable is None:
@@ -116,6 +139,20 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         dont_extend_height=True,
     )
 
+    def hints_text():
+        if input_buffer.text:
+            return ANSI("")
+        return FormattedText([
+            ("ansibrightblack",
+             "  ↑↓ select  ·  space toggle  ·  enter detail  ·  e edit  ·  d delete  ·  ctrl-d quit"),
+        ])
+
+    hints_window = Window(
+        content=FormattedTextControl(text=hints_text, focusable=False),
+        height=1,
+        always_hide_cursor=True,
+    )
+
     input_window = Window(
         content=BufferControl(buffer=input_buffer),
         height=1,
@@ -130,24 +167,65 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             _divider(),
             output_panel,
             _divider(),
+            hints_window,
             input_window,
         ]),
         focused_element=input_window,
     )
 
     kb = KeyBindings()
+    empty_input = Condition(lambda: not input_buffer.text)
 
     @kb.add("enter")
     def _enter(event):
         line = input_buffer.text
-        input_buffer.reset()
-        result = run_command(line, storage, config)
-        if result.clear:
-            state.last_result = None
-        else:
-            state.last_result = result
-        if result.exit:
-            event.app.exit()
+        if line:
+            input_buffer.reset()
+            result = run_command(line, storage, config)
+            if result.clear:
+                state.last_result = None
+            else:
+                state.last_result = result
+            if result.exit:
+                event.app.exit()
+            return
+        # Empty input + Enter: open detail of selected todo
+        sel = _selected_todo()
+        if sel is not None:
+            state.last_result = run_command(f"/show {sel.id}", storage, config)
+
+    @kb.add("up", filter=empty_input)
+    def _up(event):
+        state.selected_index = max(0, state.selected_index - 1)
+
+    @kb.add("down", filter=empty_input)
+    def _down(event):
+        todos = _visible_todos()
+        state.selected_index = min(max(0, len(todos) - 1), state.selected_index + 1)
+
+    @kb.add("space", filter=empty_input)
+    def _toggle_done(event):
+        sel = _selected_todo()
+        if sel is None:
+            return
+        storage.update(sel.id, done=not sel.done)
+        # No output panel update; the list refresh shows the change.
+
+    @kb.add("d", filter=empty_input)
+    def _delete(event):
+        sel = _selected_todo()
+        if sel is None:
+            return
+        storage.delete(sel.id)
+        state.last_result = None
+
+    @kb.add("e", filter=empty_input)
+    def _prefill_edit(event):
+        sel = _selected_todo()
+        if sel is None:
+            return
+        input_buffer.text = f"/edit {sel.id} text "
+        input_buffer.cursor_position = len(input_buffer.text)
 
     @kb.add("c-c")
     @kb.add("c-d")
