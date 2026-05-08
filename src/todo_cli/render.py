@@ -273,6 +273,21 @@ def _value_repr(value):
     return str(value), ""
 
 
+def render_confirm_delete(t: Todo) -> RenderableType:
+    header = _header(
+        S.WARN, S.S_WARN,
+        "Delete ", (f"#{t.id}", S.S_ID), "?",
+    )
+    body = Text()
+    body.append(t.text + "\n", style="bold")
+    body.append("press ", style=S.S_DIM)
+    body.append("y", style="bold green")
+    body.append(" to confirm, ", style=S.S_DIM)
+    body.append("esc", style="bold")
+    body.append(" or any other key cancels.", style=S.S_DIM)
+    return _gutter_block(header, body)
+
+
 def render_edit_form(t: Todo, fields: list[tuple[str, str]], selected_index: int) -> RenderableType:
     title = t.text[:60] + ("…" if len(t.text) > 60 else "")
     header = _header(

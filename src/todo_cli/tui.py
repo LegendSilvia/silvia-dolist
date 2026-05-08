@@ -66,6 +66,12 @@ class _State:
         # Edit-form modal state. None = not in edit mode.
         self.edit_panel_id: Optional[int] = None
         self.edit_field_index: int = 0
+        # When set, after the next /edit save the form re-opens for this id
+        # at this field index. Lets the user keep editing fields without
+        # re-opening the form by hand.
+        self.resume_edit_for_id: Optional[int] = None
+        # Delete-confirm modal state. None = not asking.
+        self.awaiting_delete_id: Optional[int] = None
 
 
 _ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask"}
@@ -153,6 +159,12 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         )
 
     def output_text():
+        if state.awaiting_delete_id is not None:
+            try:
+                target = storage.get(state.awaiting_delete_id)
+                return _to_ansi(render.render_confirm_delete(target), _term_width())
+            except Exception:
+                state.awaiting_delete_id = None
         if state.edit_panel_id is not None:
             try:
                 target = storage.get(state.edit_panel_id)
@@ -183,6 +195,15 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         multiline=False,
     )
 
+    def _on_input_changed(_buffer):
+        # Typing into the input dismisses any modal panel — the user
+        # is clearly switching to typed-command mode. resume_edit_for_id
+        # is intentionally preserved so the form can re-open after a save.
+        state.awaiting_delete_id = None
+        state.edit_panel_id = None
+
+    input_buffer.on_text_changed += _on_input_changed
+
     sky_panel = Window(
         content=FormattedTextControl(text=sky_text, focusable=False),
         wrap_lines=False,
@@ -209,6 +230,11 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     def hints_text():
         if input_buffer.text:
             return ANSI("")
+        if state.awaiting_delete_id is not None:
+            return FormattedText([
+                ("ansiyellow bold",
+                 "  press y to confirm delete  ·  n or esc cancels"),
+            ])
         if state.edit_panel_id is not None:
             return FormattedText([
                 ("ansicyan",
@@ -216,7 +242,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             ])
         return FormattedText([
             ("ansibrightblack",
-             "  ↑↓ select  ·  space toggle  ·  enter detail (twice = /ask)  ·  /edit opens form  ·  /done /del act on selected  ·  ctrl-d quit"),
+             "  ↑↓ select  ·  space toggle  ·  enter detail (twice = /ask)  ·  /edit opens form  ·  /del asks y/n  ·  ctrl-d quit"),
         ])
 
     hints_window = Window(
@@ -247,11 +273,13 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     kb = KeyBindings()
     empty_input = Condition(lambda: not input_buffer.text)
+    awaiting_delete = Condition(lambda: state.awaiting_delete_id is not None)
 
     def _enter_edit_value():
         """Inside the edit form: take the highlighted field, prefill the
         input with a /edit command pre-loaded with the current value, and
-        close the form so the user types the new value and hits Enter."""
+        close the form so the user types the new value and hits Enter.
+        Mark the form to resume after the save."""
         target_id = state.edit_panel_id
         idx = state.edit_field_index
         state.edit_panel_id = None
@@ -274,9 +302,13 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         prefix = f"/edit {target_id} {field} "
         input_buffer.text = prefix + value_str
         input_buffer.cursor_position = len(input_buffer.text)
+        state.resume_edit_for_id = target_id
 
     @kb.add("enter")
     def _enter(event):
+        # Delete confirm is up: Enter is a no-op (must press y/n/esc).
+        if state.awaiting_delete_id is not None and not input_buffer.text:
+            return
         # Edit form is open: Enter picks the field to edit.
         if state.edit_panel_id is not None and not input_buffer.text:
             _enter_edit_value()
@@ -331,6 +363,27 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
                 input_buffer.reset()
                 return
 
+        # /del opens a confirm panel instead of executing immediately.
+        if line.startswith("/del"):
+            target_id = _extract_command_id(line)
+            if target_id is None:
+                input_buffer.reset()
+                state.last_result = CommandResult(
+                    renderable=render.render_warn("nothing selected to delete")
+                )
+                return
+            try:
+                storage.get(target_id)
+            except Exception:
+                input_buffer.reset()
+                state.last_result = CommandResult(
+                    renderable=render.render_error(f"no todo with id {target_id}")
+                )
+                return
+            state.awaiting_delete_id = target_id
+            input_buffer.reset()
+            return
+
         # /ask still requires a prior view (typed-command path).
         if line.startswith("/ask"):
             target_id = _extract_command_id(line)
@@ -355,11 +408,25 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
                 state.last_viewed_id = shown_id
         else:
             state.last_viewed_id = None
+
+        # If this was a /edit save and we have a pending resume marker,
+        # re-open the edit form so the user can keep editing fields.
+        if line.startswith("/edit") and state.resume_edit_for_id is not None:
+            try:
+                storage.get(state.resume_edit_for_id)
+                state.edit_panel_id = state.resume_edit_for_id
+                # Keep the same field index so the user can move with ↑↓.
+            except Exception:
+                pass
+            state.resume_edit_for_id = None
+
         if result.exit:
             event.app.exit()
 
     @kb.add("up", filter=empty_input)
     def _up(event):
+        if state.awaiting_delete_id is not None:
+            return  # blocked while delete confirm is up; press y/n/esc
         if state.edit_panel_id is not None:
             state.edit_field_index = max(0, state.edit_field_index - 1)
             return
@@ -368,6 +435,8 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     @kb.add("down", filter=empty_input)
     def _down(event):
+        if state.awaiting_delete_id is not None:
+            return
         if state.edit_panel_id is not None:
             state.edit_field_index = min(
                 len(_EDITABLE_FIELDS) - 1, state.edit_field_index + 1
@@ -379,7 +448,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     @kb.add("space", filter=empty_input)
     def _toggle_done(event):
-        if state.edit_panel_id is not None:
+        if state.awaiting_delete_id is not None or state.edit_panel_id is not None:
             return
         sel = _selected_todo()
         if sel is None:
@@ -388,9 +457,38 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     @kb.add("escape")
     def _escape(event):
+        # Esc cancels any open modal panel.
+        cancelled = False
+        if state.awaiting_delete_id is not None:
+            state.awaiting_delete_id = None
+            cancelled = True
         if state.edit_panel_id is not None:
             state.edit_panel_id = None
+            cancelled = True
+        if state.resume_edit_for_id is not None:
+            state.resume_edit_for_id = None
+        if cancelled:
             state.last_result = None
+
+    @kb.add("y", filter=empty_input & awaiting_delete)
+    def _confirm_delete(event):
+        target_id = state.awaiting_delete_id
+        state.awaiting_delete_id = None
+        if target_id is None:
+            return
+        try:
+            storage.delete(target_id)
+            state.last_result = CommandResult(
+                renderable=render.render_info(f"Deleted #{target_id}")
+            )
+        except Exception:
+            pass
+        state.last_viewed_id = None
+
+    @kb.add("n", filter=empty_input & awaiting_delete)
+    def _cancel_delete(event):
+        state.awaiting_delete_id = None
+        state.last_result = None
 
     @kb.add("c-c")
     @kb.add("c-d")

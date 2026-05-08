@@ -59,6 +59,10 @@ ID is optional when an item is selected; the command operates on the selected ro
 
 **Edit form.** Typing `/edit` (or `/edit 17`) without a field opens a navigable form panel showing all fields and their current values. Use ↑/↓ to pick a field, Enter to start editing it (the input gets pre-filled with `/edit <id> <field> <current>` so you just modify the value and press Enter), or Esc to close.
 
+After you save a field, the form re-opens automatically so you can keep editing other fields. Press Esc when you're done.
+
+**Delete confirm.** `/del` (or `/del 17`) opens a confirmation panel showing the todo about to be deleted. Press **y** to confirm, **n** or **Esc** to cancel. ↑/↓ and Space are blocked while the confirm is up — only y, n, Esc, or starting to type a new command will dismiss it.
+
 ## Free-form input (natural language)
 
 Anything you type without a leading `/` becomes an `/add`. Before storing, the line is parsed for:
