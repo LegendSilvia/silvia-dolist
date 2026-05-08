@@ -144,7 +144,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return ANSI("")
         return FormattedText([
             ("ansibrightblack",
-             "  ↑↓ select  ·  space toggle  ·  enter detail  ·  e edit  ·  d delete  ·  ctrl-d quit"),
+             "  ↑↓ select  ·  space toggle done  ·  enter detail  ·  /del N to delete  ·  /edit N to change  ·  ctrl-d quit"),
         ])
 
     hints_window = Window(
@@ -210,22 +210,6 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return
         storage.update(sel.id, done=not sel.done)
         # No output panel update; the list refresh shows the change.
-
-    @kb.add("d", filter=empty_input)
-    def _delete(event):
-        sel = _selected_todo()
-        if sel is None:
-            return
-        storage.delete(sel.id)
-        state.last_result = None
-
-    @kb.add("e", filter=empty_input)
-    def _prefill_edit(event):
-        sel = _selected_todo()
-        if sel is None:
-            return
-        input_buffer.text = f"/edit {sel.id} text "
-        input_buffer.cursor_position = len(input_buffer.text)
 
     @kb.add("c-c")
     @kb.add("c-d")
