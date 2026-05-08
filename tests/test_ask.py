@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime, time
 
-from todo_cli.ask import build_prompt
+from todo_cli.ask import _build_claude_args, build_prompt, new_session_name
 from todo_cli.models import Todo
 
 
@@ -47,3 +47,35 @@ def test_prompt_minimal_todo():
     p = build_prompt(_make_todo())
     assert "finish report" in p
     assert "Title" in p
+
+
+def test_prompt_asks_for_full_list_context():
+    p = build_prompt(_make_todo())
+    assert "list_todos" in p
+
+
+def test_new_session_name_starts_with_todo_id():
+    name = new_session_name(_make_todo())
+    assert name.startswith("todo-1-")
+    # Suffix is uuid-derived hex chars
+    assert len(name) == len("todo-1-") + 8
+
+
+def test_build_claude_args_fresh_session():
+    args = _build_claude_args(prompt="hi", session_name="todo-1-abc", resume_session=None)
+    assert args[0] == "claude"
+    assert "-n" in args
+    assert "todo-1-abc" in args
+    assert "hi" in args
+
+
+def test_build_claude_args_resume_skips_prompt():
+    args = _build_claude_args(prompt="hi", session_name=None, resume_session="todo-1-abc")
+    assert args[0] == "claude"
+    assert "--resume" in args
+    assert "todo-1-abc" in args
+    assert "hi" not in args
+
+
+def test_build_claude_args_no_session_no_prompt():
+    assert _build_claude_args(None, None, None) == ["claude"]

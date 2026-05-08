@@ -18,6 +18,7 @@ class Todo:
     tags: list[str] = field(default_factory=list)
     project: str | None = None
     description: str | None = None
+    claude_session: str | None = None
     completed_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -31,6 +32,7 @@ class Todo:
             "tags": list(self.tags),
             "project": self.project,
             "description": self.description,
+            "claude_session": self.claude_session,
             "created_at": self.created_at.isoformat(),
             "completed_at": (
                 self.completed_at.isoformat() if self.completed_at else None
@@ -49,6 +51,7 @@ class Todo:
             tags=list(data.get("tags", [])),
             project=data.get("project"),
             description=data.get("description"),
+            claude_session=data.get("claude_session"),
             created_at=datetime.fromisoformat(data["created_at"]),
             completed_at=(
                 datetime.fromisoformat(data["completed_at"])

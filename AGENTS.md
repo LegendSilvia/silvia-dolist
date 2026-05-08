@@ -31,6 +31,7 @@ A todo has these fields. Treat any that aren't listed in your input schema as op
 | `priority` | `"low"` \| `"med"` \| `"high"` \| null | |
 | `tags` | string[] | Free-form labels. The user types them as `#tag`. |
 | `project` | string \| null | Single project label. The user types it as `@project`. |
+| `claude_session` | string \| null | Name of a Claude Code session attached to this todo. Set by the user's `/ask` command on first invocation; subsequent /asks resume it. |
 | `created_at` | ISO datetime | Set by the server on add. |
 | `completed_at` | ISO datetime \| null | Set when `done` flips to true; cleared when flipped back. |
 
@@ -125,4 +126,6 @@ Please help me think through how to approach this — break it into steps,
 surface anything I might be missing, and suggest a concrete first action.
 ```
 
-When you receive that prompt, you don't need to fetch the todo via MCP — the user already has the context inline. Acknowledge what they're working on, then engage with the actual task. If they want you to update the todo afterwards (mark done, add a note, change priority), use `edit_todo` / `mark_done` / `mark_undone`.
+When you receive that prompt, you don't need to fetch the *target* todo — the user already has its details inline. **But the prompt explicitly asks you to call `list_todos`** to read the rest of the open list for cross-context. Do that early; mention any items that interact with the one you're working on.
+
+Subsequent `/ask` calls on the same todo resume the same session, so you'll see the conversation history. Treat each new turn as a follow-up — don't re-summarize the prior context unless the user asks. If they want you to update the todo (mark done, add notes), use `edit_todo` / `mark_done` / `mark_undone` as before.

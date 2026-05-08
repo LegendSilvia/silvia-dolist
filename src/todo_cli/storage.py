@@ -122,7 +122,7 @@ class Storage:
                     return
             raise TodoNotFound(f"No todo with id {id}")
 
-    _UPDATABLE_FIELDS = {"text", "done", "due", "due_time", "priority", "tags", "project", "description"}
+    _UPDATABLE_FIELDS = {"text", "done", "due", "due_time", "priority", "tags", "project", "description", "claude_session"}
 
     def update(self, id: int, **fields) -> Todo:
         for k in fields:

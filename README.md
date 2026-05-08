@@ -99,7 +99,9 @@ The list color-codes the due indicator by how close the deadline is:
 
 ## /ask — hand a todo to Claude
 
-`/ask` takes a todo, builds a prompt that includes the title, description, due, priority, tags, and project, copies it to your clipboard, and opens a new terminal running `claude`. Paste with `Ctrl-V` and you're talking to Claude with the full context.
+`/ask` takes a todo, builds a prompt that includes the title, description, due, priority, tags, and project, then opens a new terminal with `claude` started **interactively with the prompt already loaded** — no pasting needed. The prompt also asks Claude to call `list_todos` (via the `todo` MCP server, if you've registered it) so it has context on the rest of your list before responding.
+
+**Resumable sessions.** First `/ask` on a todo names a Claude session like `todo-17-abc12345` and stores the name on the todo. Subsequent `/ask` calls resume that same session via `claude --resume <name>`, so the conversation picks up where it left off — useful when a todo isn't solved in one day. The session name shows up in `/show` detail and in the edit form (you can clear it with `/edit claude_session none` to start fresh next time).
 
 **Detail view.** Pressing Enter on a selected todo opens its detail in the output panel — title, description, due, priority, tags, project, timestamps. Esc closes it. ↑/↓ also closes it (you've moved on). The detail re-renders live so changes from the MCP server show up.
 

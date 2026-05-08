@@ -244,6 +244,8 @@ def render_todo_detail(t: Todo) -> RenderableType:
         facts.append(Text(f"project:  @{t.project}", style=S.S_DIM))
     if t.tags:
         facts.append(Text("tags:     " + " ".join(f"#{x}" for x in t.tags), style=S.S_DIM))
+    if t.claude_session:
+        facts.append(Text(f"claude:   session {t.claude_session}", style=S.S_DIM))
     facts.append(Text(f"created:  {t.created_at.isoformat(timespec='minutes')}", style=S.S_DIM))
     if t.completed_at:
         facts.append(Text(f"done at:  {t.completed_at.isoformat(timespec='minutes')}", style=S.S_DIM))

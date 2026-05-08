@@ -85,6 +85,7 @@ _EDITABLE_FIELDS = [
     ("priority", "Priority"),
     ("tags", "Tags"),
     ("project", "Project"),
+    ("claude_session", "Claude session"),
 ]
 
 

@@ -285,15 +285,26 @@ def _handle_ask(args: list[str], storage: Storage, config: Config) -> CommandRes
     todo = storage.get(tid)
     prompt = ask_mod.build_prompt(todo)
     copied = ask_mod.copy_to_clipboard(prompt)
-    opened = ask_mod.open_terminal_with_claude()
-    bits = []
+
+    if todo.claude_session:
+        opened = ask_mod.open_terminal_with_claude(
+            resume_session=todo.claude_session,
+        )
+        action = f"resumed session {todo.claude_session}"
+    else:
+        session_name = ask_mod.new_session_name(todo)
+        opened = ask_mod.open_terminal_with_claude(
+            prompt=prompt,
+            session_name=session_name,
+        )
+        if opened:
+            storage.update(tid, claude_session=session_name)
+        action = f"started session {session_name}"
+
+    bits = [action] if opened else []
     if copied:
         bits.append("prompt copied to clipboard")
-    else:
-        bits.append("could not copy to clipboard (no clip/pbcopy/xclip found)")
-    if opened:
-        bits.append("opened new terminal with claude — paste with Ctrl+V")
-    else:
-        bits.append("could not launch new terminal")
+    if not opened:
+        bits.append("could not launch new terminal — paste from clipboard manually")
     msg = f"/ask #{tid}: " + "; ".join(bits)
     return CommandResult(renderable=render.render_info(msg))
