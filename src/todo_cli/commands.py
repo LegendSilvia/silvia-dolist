@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse
 import shlex
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Callable
 
 from todo_cli.config import Config
@@ -76,6 +76,7 @@ def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -
         text=text,
         created_at=datetime.now(),
         due=parsed.due,
+        due_time=parsed.due_time,
         priority=parsed.priority,
         tags=parsed.tags,
         project=parsed.project,
@@ -156,6 +157,7 @@ def _handle_add(args: list[str], storage: Storage, config: Config) -> CommandRes
         text=text,
         created_at=datetime.now(),
         due=ns.due if ns.due is not None else parsed.due,
+        due_time=parsed.due_time,
         priority=ns.priority if ns.priority is not None else parsed.priority,
         tags=tags,
         project=ns.project if ns.project is not None else parsed.project,
@@ -244,6 +246,14 @@ def _handle_edit(args: list[str], storage: Storage, config: Config) -> CommandRe
             value = date.fromisoformat(raw_value)
         except ValueError as e:
             raise BadCommandUsage(f"due must be YYYY-MM-DD: {e}") from e
+    elif field == "due_time":
+        if not raw_value or raw_value.lower() in {"none", "null", "clear"}:
+            value = None
+        else:
+            try:
+                value = time.fromisoformat(raw_value)
+            except ValueError as e:
+                raise BadCommandUsage(f"due_time must be HH:MM: {e}") from e
     elif field == "priority":
         if raw_value not in {"low", "med", "high"}:
             raise BadCommandUsage("priority must be low, med, or high")

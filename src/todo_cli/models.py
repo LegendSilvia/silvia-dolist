@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Literal
 
 Priority = Literal["low", "med", "high"]
@@ -13,6 +13,7 @@ class Todo:
     created_at: datetime
     done: bool = False
     due: date | None = None
+    due_time: time | None = None
     priority: Priority | None = None
     tags: list[str] = field(default_factory=list)
     project: str | None = None
@@ -24,6 +25,7 @@ class Todo:
             "text": self.text,
             "done": self.done,
             "due": self.due.isoformat() if self.due else None,
+            "due_time": self.due_time.isoformat(timespec="minutes") if self.due_time else None,
             "priority": self.priority,
             "tags": list(self.tags),
             "project": self.project,
@@ -40,6 +42,7 @@ class Todo:
             text=data["text"],
             done=data.get("done", False),
             due=date.fromisoformat(data["due"]) if data.get("due") else None,
+            due_time=time.fromisoformat(data["due_time"]) if data.get("due_time") else None,
             priority=data.get("priority"),
             tags=list(data.get("tags", [])),
             project=data.get("project"),

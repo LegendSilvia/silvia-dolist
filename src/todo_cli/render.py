@@ -7,7 +7,7 @@ Every block has the shape:
     │
 """
 from __future__ import annotations
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime, time as _time, timedelta as _timedelta
 
 from rich.console import Console, ConsoleOptions, Group, RenderableType, RenderResult
 from rich.segment import Segment
@@ -82,10 +82,39 @@ def _priority_label(priority: str | None) -> Text:
     return Text(priority.upper(), style=_priority_style(priority))
 
 
-def _format_due(d: _date | None) -> str:
+def _format_due(d: _date | None, t: _time | None = None) -> str:
     if not d:
         return ""
-    return d.strftime("%a %b %d")
+    base = d.strftime("%a %b %d")
+    if t is not None:
+        return f"{base} {t.strftime('%H:%M')}"
+    return base
+
+
+def _due_style(d: _date | None, t: _time | None, *, now: _datetime | None = None) -> str:
+    """Pick a Rich style for a due indicator based on how close it is."""
+    if d is None:
+        return S.S_DIM
+    if now is None:
+        now = _datetime.now()
+    if t is not None:
+        deadline = _datetime.combine(d, t)
+    else:
+        # Date-only: treat the deadline as end of day.
+        deadline = _datetime.combine(d, _time(23, 59))
+    delta = deadline - now
+    secs = delta.total_seconds()
+    if secs < 0:
+        return "bold red"          # overdue
+    if secs < 3600:
+        return "bold rgb(255,140,40)"   # within 1 hour: bright orange
+    if d == now.date():
+        return "yellow"            # later today
+    if d == now.date() + _timedelta(days=1):
+        return "rgb(220,180,100)"  # tomorrow: warm tone
+    if d <= now.date() + _timedelta(days=7):
+        return ""                  # this week: default
+    return S.S_DIM                 # further out: dim
 
 
 # --- public renderers -------------------------------------------------
@@ -101,7 +130,10 @@ def render_added(todo: Todo) -> RenderableType:
     )
     extras: list[str] = []
     if todo.due:
-        extras.append(f"due {todo.due.isoformat()}")
+        if todo.due_time:
+            extras.append(f"due {todo.due.isoformat()} {todo.due_time.strftime('%H:%M')}")
+        else:
+            extras.append(f"due {todo.due.isoformat()}")
     if todo.priority:
         extras.append(f"{todo.priority} priority")
     if todo.tags:
@@ -165,12 +197,13 @@ def render_todo_list(
         if meta:
             text_cell.append("  ")
             text_cell.append(f"  {S.DOT}  ".join(meta), style=S.S_DIM)
+        due_style = _due_style(t.due, t.due_time) if not t.done else S.S_DIM
         table.add_row(
             cursor,
             glyph,
             id_text,
             _priority_label(t.priority),
-            Text(_format_due(t.due), style=S.S_DIM),
+            Text(_format_due(t.due, t.due_time), style=due_style),
             text_cell,
             style=row_style,
         )
@@ -197,7 +230,10 @@ def render_todo_detail(t: Todo) -> RenderableType:
         p.append(t.priority, style=_priority_style(t.priority))
         facts.append(p)
     if t.due:
-        facts.append(Text(f"due:      {t.due.isoformat()}  ({_format_due(t.due)})", style=S.S_DIM))
+        due_label = Text("due:      ", style=S.S_DIM)
+        due_value = _format_due(t.due, t.due_time)
+        due_label.append(due_value, style=_due_style(t.due, t.due_time))
+        facts.append(due_label)
     if t.project:
         facts.append(Text(f"project:  @{t.project}", style=S.S_DIM))
     if t.tags:

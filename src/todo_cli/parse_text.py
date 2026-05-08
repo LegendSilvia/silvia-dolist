@@ -14,7 +14,7 @@ Strict enough to avoid false positives:
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Optional
 
 import parsedatetime
@@ -53,6 +53,7 @@ _PRIORITY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 class ParsedInput:
     text: str
     due: Optional[date] = None
+    due_time: Optional[time] = None
     priority: Optional[str] = None
     tags: list[str] = field(default_factory=list)
     project: Optional[str] = None
@@ -79,12 +80,13 @@ def parse_input(line: str, *, ref: Optional[datetime] = None) -> ParsedInput:
             break
 
     due: Optional[date] = None
+    due_time: Optional[time] = None
     remainder = _SHORT_DATE_RE.sub(
         lambda m: _SHORT_DATE_ALIASES[m.group(1).lower()], remainder
     )
     nlp_result = _cal.nlp(remainder, sourceTime=ref)
     if nlp_result:
-        for parsed_dt, _code, start, end, _matched in nlp_result:
+        for parsed_dt, code, start, end, _matched in nlp_result:
             preceding = remainder[:start]
             following = remainder[end:].strip()
             trigger = _TRIGGER_RE.search(preceding)
@@ -95,8 +97,14 @@ def parse_input(line: str, *, ref: Optional[datetime] = None) -> ParsedInput:
             if not candidate:
                 continue
             due = parsed_dt.date()
+            # codes: 1=date-only, 2=time-only, 3=date+time
+            if code in (2, 3):
+                due_time = parsed_dt.time().replace(second=0, microsecond=0)
             remainder = candidate
             break
 
     text = re.sub(r"\s+", " ", remainder).strip()
-    return ParsedInput(text=text, due=due, priority=priority, tags=tags, project=project)
+    return ParsedInput(
+        text=text, due=due, due_time=due_time,
+        priority=priority, tags=tags, project=project,
+    )

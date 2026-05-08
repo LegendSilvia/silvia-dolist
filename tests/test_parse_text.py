@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from todo_cli.parse_text import parse_input
 
@@ -173,3 +173,22 @@ def test_short_form_with_trigger():
     r = parse_input("review pr by eod", ref=REF)
     assert r.text == "review pr"
     assert r.due == date(2026, 5, 8)
+
+
+def test_evening_captures_time():
+    r = parse_input("buy gorcery this evening", ref=REF)
+    assert r.text == "buy gorcery"
+    assert r.due == date(2026, 5, 8)
+    assert r.due_time == time(18, 0)
+
+
+def test_tomorrow_at_3pm():
+    r = parse_input("meeting tomorrow at 3pm", ref=REF)
+    assert r.due == date(2026, 5, 9)
+    assert r.due_time == time(15, 0)
+
+
+def test_date_only_no_time():
+    r = parse_input("ship release tomorrow", ref=REF)
+    assert r.due == date(2026, 5, 9)
+    assert r.due_time is None
