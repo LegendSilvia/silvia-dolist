@@ -17,6 +17,25 @@ SKY_HEIGHT = 4
 
 _STAR_CHARS = (".", "·", "*", "+", "'", ",")
 
+# Background colors, picked to read like a sky:
+#   day: light sky-cyan
+#   night: deep midnight blue
+_BG_DAY = "on rgb(135,206,235)"
+_BG_NIGHT = "on rgb(20,28,80)"
+_BG_TWILIGHT = "on rgb(95,80,140)"
+
+
+def _sky_bg(hour: float) -> str:
+    if 6.5 <= hour <= 17.5:
+        return _BG_DAY
+    if 5.5 <= hour < 6.5 or 17.5 < hour < 18.5:
+        return _BG_TWILIGHT
+    return _BG_NIGHT
+
+
+def _merge(fg: str, bg: str) -> str:
+    return f"{fg} {bg}".strip() if fg else bg
+
 
 def _arc_position(t: float, width: int, sky_h: int) -> tuple[int, int]:
     """Map a 0..1 progression along an arc to (row, col)."""
@@ -43,6 +62,7 @@ def _scatter_stars(
     grid: list[list[tuple[str, str]]],
     seed: int,
     density: float,
+    bg: str,
 ) -> None:
     rows = len(grid)
     cols = len(grid[0]) if rows else 0
@@ -55,23 +75,24 @@ def _scatter_stars(
         c = rng.randrange(cols)
         if grid[r][c][0] != " ":
             continue
-        grid[r][c] = (rng.choice(_STAR_CHARS), "ansibrightblack")
+        grid[r][c] = (rng.choice(_STAR_CHARS), _merge("rgb(255,245,200)", bg))
 
 
-def _horizon_line(width: int, seed: int) -> Text:
+def _horizon_line(width: int, seed: int, ground_bg: str) -> Text:
     rng = random.Random(seed)
     pieces: list[tuple[str, str]] = []
     i = 0
+    fg = "rgb(40,90,40)"
     while i < width:
         roll = rng.random()
         if roll < 0.10 and i + 2 <= width:
-            pieces.append(("/\\", "green"))
+            pieces.append(("/\\", _merge(fg, ground_bg)))
             i += 2
         elif roll < 0.20 and i + 3 <= width:
-            pieces.append(("/^\\", "green"))
+            pieces.append(("/^\\", _merge(fg, ground_bg)))
             i += 3
         else:
-            pieces.append(("▁", "green"))
+            pieces.append(("▁", _merge(fg, ground_bg)))
             i += 1
     text = Text()
     for chars, style in pieces:
@@ -85,31 +106,33 @@ def render_sky(now: Optional[datetime] = None, width: int = 80) -> Text:
     width = max(30, width)
     hour = now.hour + now.minute / 60.0
     is_night = hour < 6.0 or hour >= 18.0
+    bg = _sky_bg(hour)
 
     grid: list[list[tuple[str, str]]] = [
-        [(" ", "")] * width for _ in range(SKY_HEIGHT)
+        [(" ", bg)] * width for _ in range(SKY_HEIGHT)
     ]
 
     seed = now.year * 10000 + now.month * 100 + now.day
     if is_night:
-        _scatter_stars(grid, seed, density=0.05)
+        _scatter_stars(grid, seed, density=0.05, bg=bg)
 
     sun = _sun_position(hour, width, SKY_HEIGHT)
     if sun is not None:
         r, c = sun
-        grid[r][c] = ("☀", "bold yellow")
+        grid[r][c] = ("☀", _merge("bold rgb(255,210,80)", bg))
 
     moon = _moon_position(hour, width, SKY_HEIGHT)
     if moon is not None:
         r, c = moon
-        grid[r][c] = ("☾", "bold bright_white")
+        grid[r][c] = ("☾", _merge("bold rgb(245,245,230)", bg))
 
     # Clock in top-right corner
     time_str = now.strftime("%H:%M")
+    clock_fg = "bold rgb(20,28,80)" if not is_night else "bold rgb(255,245,200)"
     start_col = width - len(time_str) - 1
     if start_col >= 0:
         for i, ch in enumerate(time_str):
-            grid[0][start_col + i] = (ch, "bold cyan")
+            grid[0][start_col + i] = (ch, _merge(clock_fg, bg))
 
     text = Text()
     for row_idx, row in enumerate(grid):
@@ -118,5 +141,6 @@ def render_sky(now: Optional[datetime] = None, width: int = 80) -> Text:
         if row_idx < len(grid) - 1:
             text.append("\n")
     text.append("\n")
-    text.append(_horizon_line(width, seed))
+    ground_bg = "on rgb(35,55,30)"
+    text.append(_horizon_line(width, seed, ground_bg))
     return text
