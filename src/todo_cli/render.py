@@ -255,3 +255,45 @@ def render_help(text: str) -> RenderableType:
     header = _header(S.ACTIVE, S.S_ACTIVE, "Commands")
     body = Text(text, style=S.S_DIM)
     return _gutter_block(header, body)
+
+
+def _value_repr(value):
+    """How to display a Todo field value in the edit form."""
+    if value is None:
+        return "(none)", S.S_DIM
+    if isinstance(value, list):
+        if not value:
+            return "(none)", S.S_DIM
+        return ", ".join(str(v) for v in value), ""
+    if isinstance(value, bool):
+        return "yes" if value else "no", ""
+    if hasattr(value, "isoformat"):
+        # date / time
+        return value.isoformat(), ""
+    return str(value), ""
+
+
+def render_edit_form(t: Todo, fields: list[tuple[str, str]], selected_index: int) -> RenderableType:
+    title = t.text[:60] + ("…" if len(t.text) > 60 else "")
+    header = _header(
+        S.ACTIVE, S.S_ACTIVE,
+        "Edit ", (f"#{t.id}", S.S_ID), f"  {S.DOT}  ", title,
+    )
+    table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 2, 0, 0))
+    table.add_column(no_wrap=True)  # cursor
+    table.add_column(no_wrap=True)  # label
+    table.add_column(overflow="fold")  # value
+
+    for i, (field, label) in enumerate(fields):
+        is_selected = i == selected_index
+        cursor = Text("›" if is_selected else " ",
+                      style=S.S_ACTIVE if is_selected else "")
+        row_style = "reverse" if is_selected else ""
+        value_str, value_style = _value_repr(getattr(t, field, None))
+        table.add_row(
+            cursor,
+            Text(label, style="" if is_selected else S.S_DIM),
+            Text(value_str, style=value_style),
+            style=row_style,
+        )
+    return _gutter_block(header, table)

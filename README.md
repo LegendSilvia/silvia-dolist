@@ -28,6 +28,8 @@ The TUI is a full-screen layout: landscape on top, todo list, last command outpu
 - **↑ / ↓** — move the `›` cursor up and down the open list.
 - **space** — toggle done on the selected todo (reversible).
 - **enter** — open detail of the selected todo.
+- **enter again** (without moving) — hand the same todo to Claude (`/ask`). One press to look, second press to send.
+- **esc** — close the edit form (when one is open).
 
 **Commands** are typed at the input. Slash-prefixed; ID is optional when something is selected.
 
@@ -54,6 +56,8 @@ ID is optional when an item is selected; the command operates on the selected ro
 | `/exit`, `/quit` | Save and exit. |
 
 **Editable fields:** `text`, `description`, `due`, `due_time`, `priority` (`low`/`med`/`high`), `tags` (comma-separated), `project`, `done`. Use `/edit due_time none` to clear a time.
+
+**Edit form.** Typing `/edit` (or `/edit 17`) without a field opens a navigable form panel showing all fields and their current values. Use ↑/↓ to pick a field, Enter to start editing it (the input gets pre-filled with `/edit <id> <field> <current>` so you just modify the value and press Enter), or Esc to close.
 
 ## Free-form input (natural language)
 
@@ -97,7 +101,9 @@ The list color-codes the due indicator by how close the deadline is:
 
 1. Select the todo with ↑/↓.
 2. Press **Enter** to open its detail panel — review what's there.
-3. Type `/ask` and Enter. The prompt goes to your clipboard and a new terminal pops up with `claude`.
+3. Press **Enter again** (without moving the selection) to send it to Claude — same as typing `/ask`. The prompt goes to your clipboard and a new terminal pops up with `claude`.
+
+You can also type `/ask` instead of pressing Enter twice; same guard applies.
 
 If you call `/ask` without first viewing the detail (or if you've moved the selection / done another command since), the TUI will tell you to press Enter first. Add an explicit ID (`/ask 7`) and view that ID's detail (`/show 7`) if you want to keep the selection elsewhere.
 

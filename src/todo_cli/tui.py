@@ -63,9 +63,23 @@ class _State:
         # /ask requires viewing the detail first, so the user has a moment
         # to confirm what's about to be handed off to Claude.
         self.last_viewed_id: Optional[int] = None
+        # Edit-form modal state. None = not in edit mode.
+        self.edit_panel_id: Optional[int] = None
+        self.edit_field_index: int = 0
 
 
 _ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask"}
+
+# Field name + display label for the edit form, in the order shown.
+_EDITABLE_FIELDS = [
+    ("text", "Title"),
+    ("description", "Description"),
+    ("due", "Due date"),
+    ("due_time", "Due time"),
+    ("priority", "Priority"),
+    ("tags", "Tags"),
+    ("project", "Project"),
+]
 
 
 def _extract_command_id(line: str) -> Optional[int]:
@@ -94,13 +108,14 @@ def _autofill_selected_id(line: str, sel_id: Optional[int]) -> str:
         if len(parts) == 1:
             return f"{cmd} {sel_id}"
     elif cmd == "/edit":
-        if len(parts) >= 2:
-            try:
-                int(parts[1])
-                return line  # explicit ID already present
-            except ValueError:
-                rest = line[len(cmd):].strip()
-                return f"{cmd} {sel_id} {rest}"
+        if len(parts) == 1:
+            return f"{cmd} {sel_id}"
+        try:
+            int(parts[1])
+            return line  # explicit ID already present
+        except ValueError:
+            rest = line[len(cmd):].strip()
+            return f"{cmd} {sel_id} {rest}"
     return line
 
 
@@ -138,6 +153,15 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         )
 
     def output_text():
+        if state.edit_panel_id is not None:
+            try:
+                target = storage.get(state.edit_panel_id)
+                return _to_ansi(
+                    render.render_edit_form(target, _EDITABLE_FIELDS, state.edit_field_index),
+                    _term_width(),
+                )
+            except Exception:
+                state.edit_panel_id = None
         if state.last_result is None or state.last_result.renderable is None:
             return ANSI("")
         return _to_ansi(state.last_result.renderable, _term_width())
@@ -185,9 +209,14 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     def hints_text():
         if input_buffer.text:
             return ANSI("")
+        if state.edit_panel_id is not None:
+            return FormattedText([
+                ("ansicyan",
+                 "  ↑↓ pick field  ·  enter to edit value  ·  esc cancel"),
+            ])
         return FormattedText([
             ("ansibrightblack",
-             "  ↑↓ select  ·  space toggle  ·  enter detail  ·  /done /del /edit act on selected  ·  /ask after enter  ·  ctrl-d quit"),
+             "  ↑↓ select  ·  space toggle  ·  enter detail (twice = /ask)  ·  /edit opens form  ·  /done /del act on selected  ·  ctrl-d quit"),
         ])
 
     hints_window = Window(
@@ -219,21 +248,90 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     kb = KeyBindings()
     empty_input = Condition(lambda: not input_buffer.text)
 
+    def _enter_edit_value():
+        """Inside the edit form: take the highlighted field, prefill the
+        input with a /edit command pre-loaded with the current value, and
+        close the form so the user types the new value and hits Enter."""
+        target_id = state.edit_panel_id
+        idx = state.edit_field_index
+        state.edit_panel_id = None
+        if target_id is None or not (0 <= idx < len(_EDITABLE_FIELDS)):
+            return
+        field, _label = _EDITABLE_FIELDS[idx]
+        try:
+            target = storage.get(target_id)
+        except Exception:
+            return
+        value = getattr(target, field, None)
+        if value is None:
+            value_str = ""
+        elif isinstance(value, list):
+            value_str = ",".join(str(v) for v in value)
+        elif hasattr(value, "isoformat"):
+            value_str = value.isoformat()
+        else:
+            value_str = str(value)
+        prefix = f"/edit {target_id} {field} "
+        input_buffer.text = prefix + value_str
+        input_buffer.cursor_position = len(input_buffer.text)
+
     @kb.add("enter")
     def _enter(event):
+        # Edit form is open: Enter picks the field to edit.
+        if state.edit_panel_id is not None and not input_buffer.text:
+            _enter_edit_value()
+            return
+
         line = input_buffer.text.strip()
         if not line:
-            # Empty + Enter: open detail of selected todo and arm /ask.
             sel = _selected_todo()
-            if sel is not None:
+            if sel is None:
+                return
+            # Enter twice on the same selection: detail → /ask.
+            if state.last_viewed_id == sel.id:
+                state.last_viewed_id = None
+                state.last_result = run_command(f"/ask {sel.id}", storage, config)
+            else:
                 state.last_viewed_id = sel.id
                 state.last_result = run_command(f"/show {sel.id}", storage, config)
             return
+
         sel = _selected_todo()
         line = _autofill_selected_id(line, sel.id if sel else None)
 
-        # /ask requires that the user has just viewed the detail — gives a
-        # beat to read what's about to be handed off to Claude.
+        # /edit with just an id opens the visual edit form.
+        if line.startswith("/edit"):
+            parts = line.split(maxsplit=2)
+            if len(parts) <= 2:
+                target_id = None
+                if len(parts) == 2:
+                    try:
+                        target_id = int(parts[1])
+                    except ValueError:
+                        target_id = None
+                if target_id is None and sel is not None:
+                    target_id = sel.id
+                if target_id is None:
+                    input_buffer.reset()
+                    state.last_result = CommandResult(
+                        renderable=render.render_warn("nothing selected to edit")
+                    )
+                    return
+                try:
+                    storage.get(target_id)
+                except Exception:
+                    input_buffer.reset()
+                    state.last_result = CommandResult(
+                        renderable=render.render_error(f"no todo with id {target_id}")
+                    )
+                    return
+                state.edit_panel_id = target_id
+                state.edit_field_index = 0
+                state.last_viewed_id = None
+                input_buffer.reset()
+                return
+
+        # /ask still requires a prior view (typed-command path).
         if line.startswith("/ask"):
             target_id = _extract_command_id(line)
             if target_id is None or state.last_viewed_id != target_id:
@@ -251,8 +349,6 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             state.last_result = None
         else:
             state.last_result = result
-        # /show updates last_viewed_id; other commands invalidate the prior
-        # view so /ask requires a fresh look.
         if line.startswith("/show"):
             shown_id = _extract_command_id(line)
             if shown_id is not None:
@@ -264,20 +360,37 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     @kb.add("up", filter=empty_input)
     def _up(event):
+        if state.edit_panel_id is not None:
+            state.edit_field_index = max(0, state.edit_field_index - 1)
+            return
         state.selected_index = max(0, state.selected_index - 1)
+        state.last_viewed_id = None  # selection moved → /ask must re-view
 
     @kb.add("down", filter=empty_input)
     def _down(event):
+        if state.edit_panel_id is not None:
+            state.edit_field_index = min(
+                len(_EDITABLE_FIELDS) - 1, state.edit_field_index + 1
+            )
+            return
         todos = _visible_todos()
         state.selected_index = min(max(0, len(todos) - 1), state.selected_index + 1)
+        state.last_viewed_id = None
 
     @kb.add("space", filter=empty_input)
     def _toggle_done(event):
-        # Space (non-alphabet) is safe — toggling done is reversible.
+        if state.edit_panel_id is not None:
+            return
         sel = _selected_todo()
         if sel is None:
             return
         storage.update(sel.id, done=not sel.done)
+
+    @kb.add("escape")
+    def _escape(event):
+        if state.edit_panel_id is not None:
+            state.edit_panel_id = None
+            state.last_result = None
 
     @kb.add("c-c")
     @kb.add("c-d")

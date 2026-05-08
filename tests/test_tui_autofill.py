@@ -49,3 +49,7 @@ def test_free_form_unchanged():
 
 def test_empty_line_unchanged():
     assert _autofill_selected_id("", 5) == ""
+
+
+def test_bare_edit_uses_selected():
+    assert _autofill_selected_id("/edit", 5) == "/edit 5"
