@@ -1,4 +1,4 @@
-# todo-cli
+# silvia-dolist
 
 A personal todo app with a full-screen TUI and an MCP server, sharing one local JSON file. Designed for daily use; no cloud, no account.
 
