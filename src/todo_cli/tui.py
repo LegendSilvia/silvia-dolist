@@ -237,6 +237,6 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         key_bindings=kb,
         full_screen=True,
         mouse_support=False,
-        refresh_interval=30.0,  # tick the clock every 30s
+        refresh_interval=2.0,  # animate cloud drift; clock ticks too
     )
     app.run()

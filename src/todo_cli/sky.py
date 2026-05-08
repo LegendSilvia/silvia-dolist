@@ -71,6 +71,7 @@ def _scatter_clouds(
     grid: list[list[tuple[str, str]]],
     seed: int,
     coverage: float,
+    drift: int = 0,
 ) -> None:
     rows = len(grid)
     cols = len(grid[0]) if rows else 0
@@ -84,11 +85,13 @@ def _scatter_clouds(
         attempts += 1
         chunk = rng.choice(_CLOUD_CHUNKS)
         r = rng.choice([0, 0, 1, 1, 2])
-        c = rng.randrange(0, max(1, cols - len(chunk)))
+        max_c = max(1, cols - len(chunk))
+        base_c = rng.randrange(0, max_c)
+        # Drift wraps each cloud's position around the panel over time.
+        c = (base_c + drift) % max_c
         if any(grid[r][c + i][0] != " " for i in range(len(chunk))):
             continue
         for i, ch in enumerate(chunk):
-            # Subtle gradient: pure ▓ blocks read brighter than ░ edges.
             grid[r][c + i] = (ch, "rgb(230,230,235)")
         placed += len(chunk)
 
@@ -129,7 +132,12 @@ def render_sky(now: Optional[datetime] = None, width: int = 80) -> Text:
     if is_night:
         _scatter_stars(grid, seed, density=0.10)
     else:
-        _scatter_clouds(grid, seed, coverage=0.20)
+        # Clouds drift one panel-width per ~90 seconds — slow enough
+        # to feel atmospheric, fast enough to notice between refreshes.
+        drift_period = 90.0
+        drift_t = (now.timestamp() % drift_period) / drift_period
+        drift_cols = int(drift_t * width)
+        _scatter_clouds(grid, seed, coverage=0.20, drift=drift_cols)
 
     sun = _sun_position(hour, width, SKY_HEIGHT)
     if sun is not None:
