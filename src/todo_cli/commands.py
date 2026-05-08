@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import os
+import re
 import shlex
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -38,6 +39,35 @@ KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
     "/ask", "/config", "/help", "/clear", "/exit", "/quit",
 ]
+
+
+_KNOWN_SLASH_NAMES = {c.lstrip("/") for c in KNOWN_COMMANDS}
+
+_MSYS_MANGLED_RE = re.compile(r"^[A-Za-z]:[/\\].*[/\\]([^/\\]+)$")
+
+
+def unmangle_msys_args(args: list[str]) -> list[str]:
+    """Recover slash commands that Git Bash / MSYS path-translated.
+
+    On Windows, MSYS shells auto-rewrite argv elements that start with
+    `/` by prepending the MSYS install path — so `todo /list` becomes
+    `todo C:/Users/foo/AppData/Local/Programs/Git/list`. Without this
+    recovery, the CLI sees the path as free-form text and adds a new
+    todo titled with the path, silently polluting the list.
+
+    Heuristic: if an arg looks like a Windows path and its basename
+    matches one of our known slash command names, restore the leading
+    slash. Other Windows paths (e.g. genuine file references) pass
+    through unchanged.
+    """
+    out: list[str] = []
+    for arg in args:
+        m = _MSYS_MANGLED_RE.match(arg)
+        if m and m.group(1) in _KNOWN_SLASH_NAMES:
+            out.append("/" + m.group(1))
+        else:
+            out.append(arg)
+    return out
 
 
 def _tokenize(line: str) -> list[str]:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from todo_cli.commands import run_command
+from todo_cli.commands import run_command, unmangle_msys_args
 from todo_cli.config import Config
 from todo_cli.errors import SchemaMismatch, StorageCorrupt
 from todo_cli.storage import Storage
@@ -38,6 +38,7 @@ def main() -> int:
 
 
 def _one_shot(args: list[str], storage: Storage, config: Config) -> int:
+    args = unmangle_msys_args(args)
     line = " ".join(args)
     result = run_command(line, storage, config)
     if result.renderable is not None:
