@@ -6,11 +6,23 @@ The TUI shows a live landscape (sun/moon/clock/clouds), the open todo list, and 
 
 ## Install
 
-```powershell
-pip install -e .[dev]
+With [uv](https://docs.astral.sh/uv/) (recommended — locked, reproducible, fast):
+
+```bash
+uv sync
+uv run todo                  # launch the TUI
+uv run todo /list            # one-shot mode
+uv run pytest                # run tests
 ```
 
-Installs two console scripts: `todo` (TUI / one-shot CLI) and `todo-mcp` (MCP stdio server).
+Or with plain pip:
+
+```bash
+pip install -e .[dev]
+todo                         # launch the TUI
+```
+
+Both install two console scripts: `todo` (TUI / one-shot CLI) and `todo-mcp` (MCP stdio server). uv pins exact versions in `uv.lock`, so a fresh checkout produces the same dependency tree on every machine.
 
 ## Quick start
 
@@ -163,8 +175,9 @@ The TUI and the MCP server can run simultaneously against the same file. Mutatio
 
 ## Tests
 
-```powershell
-pytest
+```bash
+uv run pytest                # via uv
+pytest                       # if installed with pip
 ```
 
 ## Project layout
