@@ -15,6 +15,7 @@ input as a REPL line; Ctrl-C / Ctrl-D / /exit quits.
 from __future__ import annotations
 import io
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +33,7 @@ from todo_cli import render
 from todo_cli import symbols as S
 from todo_cli.commands import CommandResult, KNOWN_COMMANDS, run_command
 from todo_cli.config import Config
+from todo_cli.sky import SKY_HEIGHT, render_sky
 from todo_cli.storage import Storage
 
 
@@ -60,6 +62,10 @@ class _State:
 def run(storage: Storage, config: Config, history_path: Path) -> None:
     state = _State()
 
+    def sky_text():
+        width = _term_width()
+        return _to_ansi(render_sky(datetime.now(), width=width), width)
+
     def todos_text():
         width = _term_width()
         todos = storage.list(done=False)
@@ -87,13 +93,21 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         multiline=False,
     )
 
+    sky_panel = Window(
+        content=FormattedTextControl(text=sky_text, focusable=False),
+        wrap_lines=False,
+        always_hide_cursor=True,
+        height=SKY_HEIGHT + 1,  # 4 sky rows + 1 horizon
+    )
+
     todo_panel = Window(
         content=FormattedTextControl(text=todos_text, focusable=False),
         wrap_lines=False,
         always_hide_cursor=True,
     )
 
-    divider = Window(height=1, char="─", style="fg:ansibrightblack")
+    def _divider() -> Window:
+        return Window(height=1, char="─", style="fg:ansibrightblack")
 
     output_panel = Window(
         content=FormattedTextControl(text=output_text, focusable=False),
@@ -109,7 +123,15 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     )
 
     layout = Layout(
-        HSplit([todo_panel, divider, output_panel, divider, input_window]),
+        HSplit([
+            sky_panel,
+            _divider(),
+            todo_panel,
+            _divider(),
+            output_panel,
+            _divider(),
+            input_window,
+        ]),
         focused_element=input_window,
     )
 
@@ -137,5 +159,6 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         key_bindings=kb,
         full_screen=True,
         mouse_support=False,
+        refresh_interval=30.0,  # tick the clock every 30s
     )
     app.run()
