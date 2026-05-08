@@ -31,7 +31,7 @@ def render_todo_list(todos: list[Todo]) -> Table:
     for t in sorted(todos, key=_sort_key):
         table.add_row(
             str(t.id),
-            "[green]✓[/green]" if t.done else "",
+            "[green]x[/green]" if t.done else "",
             (t.priority or "").upper(),
             t.due.isoformat() if t.due else "",
             t.project or "",
@@ -46,10 +46,10 @@ def render_todo_detail(t: Todo) -> Panel:
     body.append(f"#{t.id}  ", style="bold cyan")
     body.append(t.text + "\n\n")
     body.append(f"Done: {'yes' if t.done else 'no'}\n")
-    body.append(f"Priority: {t.priority or '—'}\n")
-    body.append(f"Due: {t.due.isoformat() if t.due else '—'}\n")
-    body.append(f"Project: {t.project or '—'}\n")
-    body.append(f"Tags: {', '.join(t.tags) or '—'}\n")
+    body.append(f"Priority: {t.priority or '-'}\n")
+    body.append(f"Due: {t.due.isoformat() if t.due else '-'}\n")
+    body.append(f"Project: {t.project or '-'}\n")
+    body.append(f"Tags: {', '.join(t.tags) or '-'}\n")
     body.append(f"Created: {t.created_at.isoformat()}\n")
     if t.completed_at:
         body.append(f"Completed: {t.completed_at.isoformat()}\n")

@@ -9,6 +9,11 @@ from todo_cli import repl
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
     home = Path.home() / ".todo"
     storage_path = home / "todos.json"
     config_path = home / "config.json"
