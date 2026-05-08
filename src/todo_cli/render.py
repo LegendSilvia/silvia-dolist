@@ -262,8 +262,10 @@ def render_help(text: str) -> RenderableType:
 def render_mcp_setup(snippet: str, copied: bool) -> RenderableType:
     header = _header(S.ACTIVE, S.S_ACTIVE, "MCP setup")
     body = Text()
+    body.append("Easiest — run this in any terminal:\n", style=S.S_DIM)
+    body.append("  claude mcp add todo todo-mcp\n\n", style="cyan")
     body.append(
-        "Add this to your MCP client config and reload it.\n",
+        "Or paste this JSON into your MCP client config and reload:\n",
         style=S.S_DIM,
     )
     body.append(
@@ -274,7 +276,7 @@ def render_mcp_setup(snippet: str, copied: bool) -> RenderableType:
     body.append(snippet, style="cyan")
     body.append("\n")
     if copied:
-        body.append("\nCopied to clipboard.", style="green")
+        body.append("\nJSON copied to clipboard.", style="green")
     else:
         body.append(
             "\nClipboard tool not available — copy the block above manually.",
