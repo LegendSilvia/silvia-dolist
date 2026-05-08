@@ -2,6 +2,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from rich.console import Console
+
+from todo_cli.commands import run_command
 from todo_cli.config import Config
 from todo_cli.errors import SchemaMismatch, StorageCorrupt
 from todo_cli.storage import Storage
@@ -31,9 +34,19 @@ def main() -> int:
 
     config = Config.load(config_path)
     try:
+        if len(sys.argv) > 1:
+            return _one_shot(sys.argv[1:], storage, config)
         repl.run(storage, config, history_path)
     finally:
         config.save(config_path)
+    return 0
+
+
+def _one_shot(args: list[str], storage: Storage, config: Config) -> int:
+    line = " ".join(args)
+    result = run_command(line, storage, config)
+    if result.renderable is not None:
+        Console().print(result.renderable)
     return 0
 
 

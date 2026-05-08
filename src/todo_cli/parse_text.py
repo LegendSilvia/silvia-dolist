@@ -25,6 +25,23 @@ _TAG_RE = re.compile(r"#([A-Za-z0-9][A-Za-z0-9_-]*)")
 _PROJECT_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9_-]*)")
 _TRIGGER_RE = re.compile(r"\b(due|by|on|before|after)\s+$", re.IGNORECASE)
 
+# Short forms parsedatetime doesn't recognize. Only abbreviations that
+# aren't real English words go here — "tom" is excluded to avoid mangling
+# names ("tom called").
+_SHORT_DATE_ALIASES = {
+    "tmr": "tomorrow",
+    "tmrw": "tomorrow",
+    "tomo": "tomorrow",
+    "tdy": "today",
+    "eod": "end of day",
+    "eow": "end of week",
+    "eom": "end of month",
+}
+_SHORT_DATE_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _SHORT_DATE_ALIASES) + r")\b",
+    re.IGNORECASE,
+)
+
 _PRIORITY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(?:p1|urgent|high\s+priority)\b", re.IGNORECASE), "high"),
     (re.compile(r"\b(?:p3|low\s+priority)\b", re.IGNORECASE), "low"),
@@ -62,6 +79,9 @@ def parse_input(line: str, *, ref: Optional[datetime] = None) -> ParsedInput:
             break
 
     due: Optional[date] = None
+    remainder = _SHORT_DATE_RE.sub(
+        lambda m: _SHORT_DATE_ALIASES[m.group(1).lower()], remainder
+    )
     nlp_result = _cal.nlp(remainder, sourceTime=ref)
     if nlp_result:
         for parsed_dt, code, start, end, _matched in nlp_result:

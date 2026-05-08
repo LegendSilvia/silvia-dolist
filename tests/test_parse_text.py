@@ -124,3 +124,40 @@ def test_in_n_days():
     r = parse_input("ship release in 3 days", ref=REF)
     assert r.text == "ship release"
     assert r.due == date(2026, 5, 11)
+
+
+def test_tmr_short_form():
+    r = parse_input("buy gorcery tmr", ref=REF)
+    assert r.text == "buy gorcery"
+    assert r.due == date(2026, 5, 9)
+
+
+def test_tmrw_short_form():
+    r = parse_input("call mom tmrw", ref=REF)
+    assert r.due == date(2026, 5, 9)
+
+
+def test_tdy_short_form():
+    r = parse_input("review pr tdy", ref=REF)
+    assert r.due == date(2026, 5, 8)
+
+
+def test_eod_short_form():
+    r = parse_input("ship feature eod", ref=REF)
+    assert r.due == date(2026, 5, 8)
+
+
+def test_eow_short_form():
+    r = parse_input("file expenses eow", ref=REF)
+    assert r.due is not None  # parsedatetime returns end-of-week date
+
+
+def test_eom_short_form():
+    r = parse_input("close month eom", ref=REF)
+    assert r.due == date(2026, 5, 31)
+
+
+def test_short_form_with_trigger():
+    r = parse_input("review pr by eod", ref=REF)
+    assert r.text == "review pr"
+    assert r.due == date(2026, 5, 8)
