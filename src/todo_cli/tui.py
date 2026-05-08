@@ -59,6 +59,7 @@ class _State:
     def __init__(self) -> None:
         self.last_result: Optional[CommandResult] = None
         self.selected_index: int = 0
+        self.awaiting_delete_id: Optional[int] = None
 
 
 def run(storage: Storage, config: Config, history_path: Path) -> None:
@@ -95,6 +96,12 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         )
 
     def output_text():
+        if state.awaiting_delete_id is not None:
+            try:
+                target = storage.get(state.awaiting_delete_id)
+                return _to_ansi(render.render_confirm_delete(target), _term_width())
+            except Exception:
+                state.awaiting_delete_id = None
         if state.last_result is None or state.last_result.renderable is None:
             return ANSI("")
         return _to_ansi(state.last_result.renderable, _term_width())
@@ -115,6 +122,12 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         history=FileHistory(str(history_path)),
         multiline=False,
     )
+
+    def _cancel_pending_confirms(_buffer=None):
+        # Any movement of input or selection cancels a pending delete confirm.
+        state.awaiting_delete_id = None
+
+    input_buffer.on_text_changed += _cancel_pending_confirms
 
     sky_panel = Window(
         content=FormattedTextControl(text=sky_text, focusable=False),
@@ -142,9 +155,14 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
     def hints_text():
         if input_buffer.text:
             return ANSI("")
+        if state.awaiting_delete_id is not None:
+            return FormattedText([
+                ("ansiyellow bold",
+                 "  press y to confirm delete  ·  any other key cancels"),
+            ])
         return FormattedText([
             ("ansibrightblack",
-             "  ↑↓ select  ·  space toggle done  ·  enter detail  ·  /del N to delete  ·  /edit N to change  ·  ctrl-d quit"),
+             "  ↑↓ select  ·  space toggle  ·  enter detail  ·  e edit  ·  d delete (asks y/n)  ·  ctrl-d quit"),
         ])
 
     hints_window = Window(
@@ -175,6 +193,8 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     kb = KeyBindings()
     empty_input = Condition(lambda: not input_buffer.text)
+    awaiting_delete = Condition(lambda: state.awaiting_delete_id is not None)
+    not_awaiting = Condition(lambda: state.awaiting_delete_id is None)
 
     @kb.add("enter")
     def _enter(event):
@@ -196,20 +216,52 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
 
     @kb.add("up", filter=empty_input)
     def _up(event):
+        _cancel_pending_confirms()
         state.selected_index = max(0, state.selected_index - 1)
 
     @kb.add("down", filter=empty_input)
     def _down(event):
+        _cancel_pending_confirms()
         todos = _visible_todos()
         state.selected_index = min(max(0, len(todos) - 1), state.selected_index + 1)
 
-    @kb.add("space", filter=empty_input)
+    @kb.add("space", filter=empty_input & not_awaiting)
     def _toggle_done(event):
         sel = _selected_todo()
         if sel is None:
             return
         storage.update(sel.id, done=not sel.done)
-        # No output panel update; the list refresh shows the change.
+
+    @kb.add("d", filter=empty_input & not_awaiting)
+    def _arm_delete(event):
+        sel = _selected_todo()
+        if sel is None:
+            return
+        state.awaiting_delete_id = sel.id
+
+    @kb.add("y", filter=empty_input & awaiting_delete)
+    def _confirm_delete(event):
+        target_id = state.awaiting_delete_id
+        state.awaiting_delete_id = None
+        if target_id is None:
+            return
+        try:
+            storage.delete(target_id)
+        except Exception:
+            pass
+        state.last_result = None
+
+    @kb.add("n", filter=empty_input & awaiting_delete)
+    def _cancel_delete(event):
+        state.awaiting_delete_id = None
+
+    @kb.add("e", filter=empty_input & not_awaiting)
+    def _prefill_edit(event):
+        sel = _selected_todo()
+        if sel is None:
+            return
+        input_buffer.text = f"/edit {sel.id} text "
+        input_buffer.cursor_position = len(input_buffer.text)
 
     @kb.add("c-c")
     @kb.add("c-d")

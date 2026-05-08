@@ -249,3 +249,16 @@ def render_help(text: str) -> RenderableType:
     header = _header(S.ACTIVE, S.S_ACTIVE, "Commands")
     body = Text(text, style=S.S_DIM)
     return _gutter_block(header, body)
+
+
+def render_confirm_delete(t: Todo) -> RenderableType:
+    header = _header(
+        S.WARN, S.S_WARN,
+        "Delete ", (f"#{t.id}", S.S_ID), "?",
+    )
+    body = Text()
+    body.append(t.text + "\n", style="bold")
+    body.append("press ", style=S.S_DIM)
+    body.append("y", style="bold green")
+    body.append(" to confirm, any other key cancels.", style=S.S_DIM)
+    return _gutter_block(header, body)
