@@ -57,9 +57,21 @@ def test_due_phrase_not_a_date():
     assert r.due is None
 
 
-def test_time_only_ignored():
+def test_time_only_resolves_to_today():
+    # "at 3pm", "this evening", "tonight" — no date but implies today
     r = parse_input("meeting at 3pm", ref=REF)
-    assert r.due is None
+    assert r.due == date(2026, 5, 8)
+
+
+def test_evening_resolves_to_today():
+    r = parse_input("buy gorcery this evening", ref=REF)
+    assert r.text == "buy gorcery"
+    assert r.due == date(2026, 5, 8)
+
+
+def test_tonight_resolves_to_today():
+    r = parse_input("call mom tonight", ref=REF)
+    assert r.due == date(2026, 5, 8)
 
 
 def test_tag_extracted():

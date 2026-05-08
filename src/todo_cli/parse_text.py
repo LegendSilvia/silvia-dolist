@@ -84,9 +84,7 @@ def parse_input(line: str, *, ref: Optional[datetime] = None) -> ParsedInput:
     )
     nlp_result = _cal.nlp(remainder, sourceTime=ref)
     if nlp_result:
-        for parsed_dt, code, start, end, _matched in nlp_result:
-            if code == 2:
-                continue
+        for parsed_dt, _code, start, end, _matched in nlp_result:
             preceding = remainder[:start]
             following = remainder[end:].strip()
             trigger = _TRIGGER_RE.search(preceding)

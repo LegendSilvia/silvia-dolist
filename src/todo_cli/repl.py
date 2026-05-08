@@ -17,7 +17,7 @@ def _make_prompt(storage: Storage) -> FormattedText:
     open_count = len(storage.list(done=False))
     return FormattedText([
         ("ansicyan bold", S.ACTIVE + " "),
-        ("ansidim", f"todo ({open_count} open) "),
+        ("ansibrightblack", f"todo ({open_count} open) "),
         ("ansicyan", "› "),
     ])
 
