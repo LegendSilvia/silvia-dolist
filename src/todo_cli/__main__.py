@@ -8,7 +8,7 @@ from todo_cli.commands import run_command
 from todo_cli.config import Config
 from todo_cli.errors import SchemaMismatch, StorageCorrupt
 from todo_cli.storage import Storage
-from todo_cli import repl
+from todo_cli import tui
 
 
 def main() -> int:
@@ -31,7 +31,7 @@ def main() -> int:
     try:
         if len(sys.argv) > 1:
             return _one_shot(sys.argv[1:], storage, config)
-        repl.run(storage, config, history_path)
+        tui.run(storage, config, history_path)
     finally:
         config.save(config_path)
     return 0
