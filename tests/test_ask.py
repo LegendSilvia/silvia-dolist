@@ -61,6 +61,25 @@ def test_prompt_warns_against_destructive_ops():
     assert "destructive" in p.lower() or "propose" in p.lower()
 
 
+def test_prompt_includes_todo_id():
+    p = build_prompt(_make_todo(id=42))
+    assert "#42" in p
+
+
+def test_prompt_includes_write_command_syntax():
+    p = build_prompt(_make_todo())
+    assert "todo /add" in p
+    assert "todo /done" in p
+    assert "todo /del" in p
+    assert "todo /edit" in p
+
+
+def test_prompt_lists_editable_fields():
+    p = build_prompt(_make_todo())
+    for field in ("text", "description", "due", "priority", "tags", "project"):
+        assert field in p
+
+
 def test_new_session_name_starts_with_todo_id():
     name = new_session_name(_make_todo())
     assert name.startswith("todo-1-")

@@ -20,6 +20,7 @@ from todo_cli.models import Todo
 
 def build_prompt(todo: Todo) -> str:
     parts = ["I'm working on this todo and would like your help:\n"]
+    parts.append(f"- ID: #{todo.id}")
     parts.append(f"- Title: {todo.text}")
     if todo.description:
         parts.append(f"- Description: {todo.description}")
@@ -36,19 +37,36 @@ def build_prompt(todo: Todo) -> str:
         parts.append(f"- Project: {todo.project}")
     parts.append("")
     parts.append(
-        "You're running in a terminal where the `todo` CLI is on PATH. Use it "
-        "to read my list before answering — that cross-context usually shapes "
-        "better advice:\n"
-        "  todo /list           open todos\n"
-        "  todo /list --all     include done items\n"
-        "  todo /show <id>      full detail for one todo\n"
-        "\n"
+        "You're running in a terminal where the `todo` CLI is on PATH. Read my "
+        "list before answering — cross-context usually shapes better advice:\n"
+        "  todo /list                   open todos\n"
+        "  todo /list --all             include done items\n"
+        "  todo /list --tag X           filter by tag\n"
+        "  todo /list --project P       filter by project\n"
+        "  todo /show <id>              full detail for one todo"
+    )
+    parts.append("")
+    parts.append(
+        "If you want to *propose* state changes for me to apply, here's the "
+        "syntax. I'll run them myself — don't run destructive commands "
+        "(/done is reversible; /del is not):\n"
+        "  todo /add <text>             new todo. text is NL-parsed for dates,\n"
+        "                               #tags, @project, p1|p2|p3 (e.g.\n"
+        "                               'buy milk tmr #shop @groceries p2')\n"
+        "  todo /done <id>              mark complete\n"
+        "  todo /undo <id>              mark incomplete\n"
+        "  todo /del <id>               delete (asks me y/n in the TUI)\n"
+        "  todo /edit <id> <field> <value>\n"
+        "                               fields: text, description, due,\n"
+        "                               due_time, priority, tags, project, done\n"
+        "                               (use 'none' as <value> to clear)"
+    )
+    parts.append("")
+    parts.append(
         "Then help me think through this todo specifically — break it into "
         "steps, surface anything I might be missing, and suggest a concrete "
         "first action. If progress here unblocks or affects other items in "
-        "the list, point it out. If I want to change state on a todo (mark "
-        "done, edit, delete) I'll do it myself — just propose, don't run "
-        "destructive commands."
+        "the list, point it out."
     )
     return "\n".join(parts)
 

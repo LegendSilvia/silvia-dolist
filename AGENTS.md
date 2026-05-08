@@ -126,7 +126,9 @@ Please help me think through how to approach this — break it into steps,
 surface anything I might be missing, and suggest a concrete first action.
 ```
 
-When you receive that prompt, you don't need to fetch the *target* todo — the user already has its details inline. **The prompt asks you to read the rest of the open list via the `todo` CLI** (`todo /list`, `todo /show <id>`) since you're in a terminal anyway. Do that early; mention any items that interact with the one you're working on.
+When you receive that prompt, you don't need to fetch the *target* todo — the user already has its details inline (including the ID, so you can refer to it as `#N`). **The prompt asks you to read the rest of the open list via the `todo` CLI** (`todo /list`, `todo /show <id>`) since you're in a terminal anyway. Do that early; mention any items that interact with the one you're working on.
+
+The prompt also includes a syntax block for the write commands (`todo /add`, `/done`, `/undo`, `/del`, `/edit`) so you can propose concrete commands instead of approximating. The user runs them; don't run destructive ones yourself.
 
 If the user has the `todo` MCP server registered separately, you can use those tools too — they hit the same JSON file with proper file locking, so they're safe to mix with shell calls. Use whichever fits the situation.
 
