@@ -479,7 +479,7 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
             return
         storage.update(sel.id, done=not sel.done)
 
-    @kb.add("escape")
+    @kb.add("escape", eager=True)
     def _escape(event):
         # Esc cancels any open modal panel.
         cancelled = False
@@ -527,6 +527,6 @@ def run(storage: Storage, config: Config, history_path: Path) -> None:
         key_bindings=kb,
         full_screen=True,
         mouse_support=False,
-        refresh_interval=2.0,  # animate cloud drift; clock ticks too
+        refresh_interval=0.5,  # snappy redraws; cloud drift animates smoothly
     )
     app.run()
