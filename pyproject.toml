@@ -11,6 +11,7 @@ dependencies = [
     "prompt_toolkit>=3.0",
     "rich>=13.7",
     "mcp>=1.27,<2",
+    "parsedatetime>=2.6,<3",
 ]
 
 [project.optional-dependencies]

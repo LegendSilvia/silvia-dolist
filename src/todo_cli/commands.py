@@ -8,6 +8,7 @@ from typing import Any, Callable
 from todo_cli.config import Config
 from todo_cli.errors import BadCommandUsage, TodoError
 from todo_cli.models import Todo
+from todo_cli.parse_text import parse_input
 from todo_cli.storage import Storage
 from todo_cli.suggest import suggest
 from todo_cli import render
@@ -68,9 +69,19 @@ def _free_form(line: str, tokens: list[str], storage: Storage, config: Config) -
                 f"Did you mean: {matches[0]}? (use /add {tokens[0]} to add as a todo)"
             )
         )
-    todo = Todo(id=0, text=line, created_at=datetime.now())
+    parsed = parse_input(line)
+    text = parsed.text or line
+    todo = Todo(
+        id=0,
+        text=text,
+        created_at=datetime.now(),
+        due=parsed.due,
+        priority=parsed.priority,
+        tags=parsed.tags,
+        project=parsed.project,
+    )
     storage.add(todo)
-    return CommandResult(renderable=render.render_info(f"Added #{todo.id}: {line}"))
+    return CommandResult(renderable=render.render_info(_added_summary(todo)))
 
 
 HELP_TEXT = """\
@@ -86,7 +97,12 @@ Commands:
   /clear          clear screen
   /exit, /quit    save and exit
 
-Free-form text is added as a new todo.
+Natural language: free-form text (or text inside /add) is parsed for date,
+priority, #tags, and @project. Examples:
+  finish report by friday #work @q2
+  buy milk tomorrow
+  call dentist next monday p1
+Explicit --flags always win over the parsed values.
 """
 
 
@@ -132,19 +148,38 @@ def _add_parser() -> argparse.ArgumentParser:
 @command("/add")
 def _handle_add(args: list[str], storage: Storage, config: Config) -> CommandResult:
     ns = _parse_or_raise(_add_parser(), args)
-    text = " ".join(ns.text)
-    tags = [t.strip() for t in ns.tags.split(",") if t.strip()]
+    raw_text = " ".join(ns.text)
+    parsed = parse_input(raw_text)
+    flag_tags = [t.strip() for t in ns.tags.split(",") if t.strip()]
+    text = parsed.text or raw_text
+    tags = flag_tags or parsed.tags
     todo = Todo(
         id=0,
         text=text,
         created_at=datetime.now(),
-        due=ns.due,
-        priority=ns.priority,
+        due=ns.due if ns.due is not None else parsed.due,
+        priority=ns.priority if ns.priority is not None else parsed.priority,
         tags=tags,
-        project=ns.project,
+        project=ns.project if ns.project is not None else parsed.project,
     )
     storage.add(todo)
-    return CommandResult(renderable=render.render_info(f"Added #{todo.id}: {text}"))
+    return CommandResult(renderable=render.render_info(_added_summary(todo)))
+
+
+def _added_summary(todo: Todo) -> str:
+    bits = [f"Added #{todo.id}: {todo.text}"]
+    extras = []
+    if todo.due:
+        extras.append(f"due {todo.due.isoformat()}")
+    if todo.priority:
+        extras.append(f"{todo.priority} priority")
+    if todo.tags:
+        extras.append("tags " + ", ".join(todo.tags))
+    if todo.project:
+        extras.append(f"project {todo.project}")
+    if extras:
+        bits.append("  (" + "; ".join(extras) + ")")
+    return "\n".join(bits)
 
 
 def _list_parser() -> argparse.ArgumentParser:

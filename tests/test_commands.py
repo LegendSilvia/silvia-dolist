@@ -238,3 +238,62 @@ def test_free_form_with_dashes_does_not_break_argparse(storage: Storage, config:
     assert "Added" in str(result.renderable)
     todo = storage.list()[0]
     assert todo.text == "buy --milk and bread"
+
+
+def test_free_form_extracts_nl_date(storage: Storage, config: Config):
+    run_command("finish report by friday", storage, config)
+    todo = storage.list()[0]
+    assert todo.text == "finish report"
+    assert todo.due is not None
+
+
+def test_free_form_extracts_tags_and_project(storage: Storage, config: Config):
+    run_command("review pr #code @backend", storage, config)
+    todo = storage.list()[0]
+    assert todo.text == "review pr"
+    assert todo.tags == ["code"]
+    assert todo.project == "backend"
+
+
+def test_free_form_extracts_priority(storage: Storage, config: Config):
+    run_command("hotfix urgent", storage, config)
+    todo = storage.list()[0]
+    assert todo.priority == "high"
+
+
+def test_add_nl_extraction_when_no_flags(storage: Storage, config: Config):
+    run_command("/add ship release tomorrow #release @platform p1", storage, config)
+    todo = storage.list()[0]
+    assert todo.text == "ship release"
+    assert todo.due is not None
+    assert todo.tags == ["release"]
+    assert todo.project == "platform"
+    assert todo.priority == "high"
+
+
+def test_add_explicit_flag_overrides_nl_date(storage: Storage, config: Config):
+    run_command(
+        "/add ship release tomorrow --due 2030-01-01",
+        storage, config,
+    )
+    todo = storage.list()[0]
+    assert todo.due == date(2030, 1, 1)
+
+
+def test_add_explicit_flag_overrides_nl_priority(storage: Storage, config: Config):
+    run_command("/add hotfix urgent --priority low", storage, config)
+    todo = storage.list()[0]
+    assert todo.priority == "low"
+
+
+def test_add_explicit_tags_override_nl_tags(storage: Storage, config: Config):
+    run_command("/add task #parsed --tags explicit", storage, config)
+    todo = storage.list()[0]
+    assert todo.tags == ["explicit"]
+
+
+def test_added_summary_shows_extracted_fields(storage: Storage, config: Config):
+    result = run_command("review pr #code @backend tomorrow", storage, config)
+    rendered = str(result.renderable)
+    assert "code" in rendered
+    assert "backend" in rendered
