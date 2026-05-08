@@ -74,7 +74,7 @@ class _State:
         self.awaiting_delete_id: Optional[int] = None
 
 
-_ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask"}
+_ID_OPTIONAL_COMMANDS = {"/done", "/undo", "/show", "/del", "/ask", "/note"}
 
 # Field name + display label for the edit form, in the order shown.
 _EDITABLE_FIELDS = [
@@ -100,6 +100,9 @@ def _extract_command_id(line: str) -> Optional[int]:
         return None
 
 
+_ID_PLUS_TEXT_COMMANDS = {"/edit", "/note"}
+
+
 def _autofill_selected_id(line: str, sel_id: Optional[int]) -> str:
     """Inject the selected todo's ID into a slash command that takes an ID
     when the user didn't type one. Returns the line unchanged if not
@@ -111,10 +114,7 @@ def _autofill_selected_id(line: str, sel_id: Optional[int]) -> str:
     if not parts:
         return line
     cmd = parts[0]
-    if cmd in _ID_OPTIONAL_COMMANDS:
-        if len(parts) == 1:
-            return f"{cmd} {sel_id}"
-    elif cmd == "/edit":
+    if cmd in _ID_PLUS_TEXT_COMMANDS:
         if len(parts) == 1:
             return f"{cmd} {sel_id}"
         try:
@@ -123,6 +123,9 @@ def _autofill_selected_id(line: str, sel_id: Optional[int]) -> str:
         except ValueError:
             rest = line[len(cmd):].strip()
             return f"{cmd} {sel_id} {rest}"
+    if cmd in _ID_OPTIONAL_COMMANDS:
+        if len(parts) == 1:
+            return f"{cmd} {sel_id}"
     return line
 
 

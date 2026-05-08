@@ -37,7 +37,7 @@ def command(name: str) -> Callable[[Handler], Handler]:
 
 KNOWN_COMMANDS: list[str] = [
     "/add", "/list", "/show", "/done", "/undo", "/edit", "/del",
-    "/ask", "/config", "/help", "/clear", "/exit", "/quit",
+    "/note", "/ask", "/config", "/help", "/clear", "/exit", "/quit",
 ]
 
 
@@ -145,6 +145,7 @@ HELP_TEXT = """\
 /undo [id]           mark incomplete
 /edit [id] <field> <value>     fields: text, description, due, due_time,
                                 priority, tags, project, done
+/note [id] <text>    append a timestamped note to description (won't clobber)
 /del [id]            delete
 /ask [id]            open new terminal with claude + copy a prompt
                      about the todo (uses text, description, due, etc.)
@@ -330,6 +331,24 @@ def _handle_del(args: list[str], storage: Storage, config: Config) -> CommandRes
     tid = _parse_id(args, "/del")
     storage.delete(tid)
     return CommandResult(renderable=render.render_info(f"Deleted #{tid}"))
+
+
+@command("/note")
+def _handle_note(args: list[str], storage: Storage, config: Config) -> CommandResult:
+    """Append a timestamped note to a todo's description without clobbering."""
+    if len(args) < 2:
+        raise BadCommandUsage("/note <id> <text>")
+    try:
+        tid = int(args[0])
+    except ValueError as e:
+        raise BadCommandUsage("/note <id> <text> — id must be an integer") from e
+    text = " ".join(args[1:])
+    todo = storage.get(tid)
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    line = f"[{stamp}] {text}"
+    new_desc = f"{todo.description}\n\n{line}" if todo.description else line
+    storage.update(tid, description=new_desc)
+    return CommandResult(renderable=render.render_info(f"Noted #{tid}"))
 
 
 @command("/ask")

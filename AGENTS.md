@@ -88,6 +88,8 @@ Returns: confirmation. Deletes are not reversible — be cautious.
 
 **Adding rich context.** If the user gives you a multi-paragraph briefing, put the headline in `text` and the rest in `description`. The TUI list shows just `text`; `description` shows up in `/show`.
 
+**Don't clobber description.** `edit_todo` with `description` *replaces* the field. If the user already has content there and you want to add notes, **read the current description first, append your text (ideally with a timestamp), and write back the merged value**. The CLI side has a `/note` command that does this for users; you should mimic that behavior on the MCP path.
+
 **Dates and times.** Always send ISO strings. The user's TUI parses natural language for them; the MCP surface is structured to keep agents deterministic. If you derive a date from "next Friday", compute it before calling, don't pass the phrase.
 
 **Priority semantics.** `high` is for "do today / blocking". `med` is the unmarked default for important work. `low` is "if I have time". Don't escalate priority without explicit user signal.

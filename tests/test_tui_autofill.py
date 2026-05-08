@@ -53,3 +53,16 @@ def test_empty_line_unchanged():
 
 def test_bare_edit_uses_selected():
     assert _autofill_selected_id("/edit", 5) == "/edit 5"
+
+
+def test_note_with_no_id_uses_selected():
+    assert _autofill_selected_id("/note remember to test on linux", 7) == \
+        "/note 7 remember to test on linux"
+
+
+def test_note_with_explicit_id_unchanged():
+    assert _autofill_selected_id("/note 4 some text", 7) == "/note 4 some text"
+
+
+def test_bare_note_uses_selected():
+    assert _autofill_selected_id("/note", 5) == "/note 5"

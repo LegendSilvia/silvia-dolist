@@ -48,7 +48,8 @@ ID is optional when an item is selected; the command operates on the selected ro
 | `/show [id]` | Detail view (title, description, due, tags, project, timestamps). |
 | `/done [id]` | Mark done. |
 | `/undo [id]` | Mark not done. |
-| `/edit [id] <field> <value>` | Update one field. See fields below. |
+| `/edit [id] <field> <value>` | Update one field. See fields below. Replaces. |
+| `/note [id] <text>` | Append a timestamped note to the description. Doesn't clobber prior content. |
 | `/del [id]` | Delete. |
 | `/ask [id]` | Open a new terminal with `claude`, copy a prompt about the todo to your clipboard so you can paste it in. |
 | `/help` | Command summary. |

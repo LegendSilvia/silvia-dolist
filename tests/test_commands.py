@@ -331,3 +331,38 @@ def test_list_marks_todos_with_description(storage: Storage, config: Config):
     rendered = _render(result.renderable)
     # Indicator glyph appears for the one with a description
     assert "ⓘ" in rendered
+
+
+def test_note_appends_to_empty_description(storage: Storage, config: Config):
+    run_command("/add deploy service", storage, config)
+    run_command("/note 1 first note", storage, config)
+    desc = storage.get(1).description
+    assert desc is not None
+    assert "first note" in desc
+    # Has timestamp prefix
+    assert "[" in desc and "]" in desc
+
+
+def test_note_appends_without_clobbering(storage: Storage, config: Config):
+    run_command("/add deploy service", storage, config)
+    run_command("/edit 1 description original content", storage, config)
+    run_command("/note 1 added later", storage, config)
+    desc = storage.get(1).description
+    assert "original content" in desc
+    assert "added later" in desc
+
+
+def test_note_multiple_appends_keep_order(storage: Storage, config: Config):
+    run_command("/add task", storage, config)
+    run_command("/note 1 first", storage, config)
+    run_command("/note 1 second", storage, config)
+    run_command("/note 1 third", storage, config)
+    desc = storage.get(1).description
+    assert desc.index("first") < desc.index("second") < desc.index("third")
+
+
+def test_note_missing_args_errors(storage: Storage, config: Config):
+    run_command("/add task", storage, config)
+    result = run_command("/note 1", storage, config)
+    rendered = str(result.renderable).lower()
+    assert "/note" in rendered or "text" in rendered
