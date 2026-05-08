@@ -16,7 +16,12 @@ from rich.text import Text
 SKY_HEIGHT = 4
 
 _STAR_CHARS = (".", "·", "*", "+", "'", ",", "✦", "✧")
-_CLOUD_CHUNKS = ("(  )", "(    )", "(   )", "(_)", "( )")
+_CLOUD_CHUNKS = ("▓▓▓", "▓▓▓▓", "▓▓", "▓▓▓▓▓")
+_SKY_FILL = "▒"  # square of dots — the "many-dot square" texture
+
+# Subdued sky tones so the texture reads as atmosphere, not a solid bar.
+_FG_DAY = "rgb(150,180,210)"
+_FG_NIGHT = "rgb(50,70,120)"
 
 
 def _arc_position(t: float, width: int, sky_h: int) -> tuple[int, int]:
@@ -53,11 +58,10 @@ def _scatter_stars(
     for _ in range(n):
         r = rng.randrange(rows)
         c = rng.randrange(cols)
-        if grid[r][c][0] != " ":
+        if grid[r][c][0] != _SKY_FILL:
             continue
         ch = rng.choice(_STAR_CHARS)
-        # Brighter glyphs get brighter color, smaller glyphs stay dim.
-        style = "bold rgb(255,245,200)" if ch in ("✦", "✧", "*") else "rgb(180,180,150)"
+        style = "bold rgb(255,245,200)" if ch in ("✦", "✧", "*") else "rgb(220,220,200)"
         grid[r][c] = (ch, style)
 
 
@@ -70,22 +74,19 @@ def _scatter_clouds(
     cols = len(grid[0]) if rows else 0
     if rows == 0 or cols == 0:
         return
-    rng = random.Random(seed + 1)  # different seed than stars so they don't align
+    rng = random.Random(seed + 1)
     target = int(cols * coverage)
     placed = 0
     attempts = 0
     while placed < target and attempts < 50:
         attempts += 1
         chunk = rng.choice(_CLOUD_CHUNKS)
-        # Clouds prefer the upper sky rows (0-1) for a "they float high" feel.
         r = rng.choice([0, 0, 1, 1, 2])
         c = rng.randrange(0, max(1, cols - len(chunk)))
-        # Don't overlap an existing non-space cell
-        if any(grid[r][c + i][0] != " " for i in range(len(chunk))):
+        if any(grid[r][c + i][0] != _SKY_FILL for i in range(len(chunk))):
             continue
         for i, ch in enumerate(chunk):
-            if ch != " ":
-                grid[r][c + i] = (ch, "rgb(220,220,220)")
+            grid[r][c + i] = (ch, "rgb(245,245,250)")
         placed += len(chunk)
 
 
@@ -117,8 +118,9 @@ def render_sky(now: Optional[datetime] = None, width: int = 80) -> Text:
     hour = now.hour + now.minute / 60.0
     is_night = hour < 6.0 or hour >= 18.0
 
+    fill_style = _FG_NIGHT if is_night else _FG_DAY
     grid: list[list[tuple[str, str]]] = [
-        [(" ", "")] * width for _ in range(SKY_HEIGHT)
+        [(_SKY_FILL, fill_style) for _ in range(width)] for _ in range(SKY_HEIGHT)
     ]
 
     seed = now.year * 10000 + now.month * 100 + now.day
